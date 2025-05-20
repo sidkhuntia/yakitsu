@@ -49,6 +49,9 @@
 - [ ] make the game look like infinite runner, right now its just a static background
 - [ ] there should be different types of obstacles, some that move, some that don't
 - [ ] the avatar should have different animations when it runs
+- [ ] Add game over screen, it should show the score and a button to restart the game
+
+
 
 
 

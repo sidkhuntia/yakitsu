@@ -9,12 +9,10 @@ export class SettingsModal extends Phaser.GameObjects.Container {
     private lockInputBtn: Phaser.GameObjects.Text;
     private clearBtn: Phaser.GameObjects.Text;
     private closeBtn: Phaser.GameObjects.Text;
-    private scene: Phaser.Scene;
     private onClose: () => void;
 
     constructor(scene: Phaser.Scene, onClose: () => void) {
         super(scene);
-        this.scene = scene;
         this.onClose = onClose;
         const { width, height } = scene.scale;
         this.bg = scene.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.5).setInteractive();

@@ -26,7 +26,6 @@ export default class Play extends Phaser.Scene {
     private easyWords: string[] = [];
     private mediumWords: string[] = [];
     private hardWords: string[] = [];
-    private wordsLoaded = false;
     private wordsCompleted = 0;
     private caretFlashTimer?: Phaser.Time.TimerEvent;
     private powerUpType: 'ice' | 'bomb' | null = null;
@@ -60,7 +59,6 @@ export default class Play extends Phaser.Scene {
         this.easyWords = this.cache.json.get('easyWords') || [];
         this.mediumWords = this.cache.json.get('mediumWords') || [];
         this.hardWords = this.cache.json.get('hardWords') || [];
-        this.wordsLoaded = this.easyWords.length > 0 && this.mediumWords.length > 0 && this.hardWords.length > 0;
         const firstWord = this.getNextWord();
         this.engine = new TypingEngine(firstWord);
         this.createGround();
@@ -74,7 +72,6 @@ export default class Play extends Phaser.Scene {
             if (this.engine.isComplete() || this.gameOverTriggered || this.inputLocked) return;
             // Only allow a-z or A-Z
             if (!/^[a-zA-Z]$/.test(event.key)) return;
-            const expected = this.engine.getWord()[this.engine.getCaret()];
             const ok = this.engine.input(event.key);
             this.updateWordDisplay();
             if (ok) {
@@ -239,10 +236,11 @@ export default class Play extends Phaser.Scene {
         }).setOrigin(0.5);
     }
 
-    handleResize(gameSize: Phaser.Structs.Size) {
+    handleResize(_gameSize: Phaser.Structs.Size) {
         this.createGround();
         // Reposition avatar and obstacle
-        const { height, width } = this.scale;
+        const { height } = this.scale;
+
         if (this.avatar) this.avatar.setY(height - 80);
         if (this.obstacle) this.obstacle.setY(height - 80);
         this.updateWordDisplay();

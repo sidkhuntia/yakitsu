@@ -36,6 +36,7 @@ export default class Play extends Phaser.Scene {
     private obstacleSpeed = 2;
     private settingsModalOpen = false;
     private backgroundLayers: Phaser.GameObjects.TileSprite[] = [];
+    private groundLayers: Phaser.GameObjects.TileSprite[] = [];
     // private avatarMoving: boolean = false;
     private fullscreenBtn!: Phaser.GameObjects.DOMElement;
     private fullscreenChangeHandler?: () => void;
@@ -46,8 +47,6 @@ export default class Play extends Phaser.Scene {
     }
 
     preload() {
-
-        this.load.image('ground', 'assets/ground.png');
         this.load.image('obstacle', 'assets/obstacle.png');
         this.load.image('ice', 'assets/ice.png');
         this.load.image('bomb', 'assets/bomb.png');
@@ -55,17 +54,15 @@ export default class Play extends Phaser.Scene {
         this.load.json('mediumWords', 'data/words/medium.json');
         this.load.json('hardWords', 'data/words/hard.json');
 
-        // Load the proper parallax background layers
-        console.log('Loading parallax background assets...');
-        for (let i = 1; i <= 5; i++) {
-            this.load.image(`plx-${i}`, `assets/plx-${i}.png`);
-            console.log(`Loading plx-${i} from assets/plx-${i}.png`);
+        // Load all background layers
+        for (let i = 2; i <= 11; i++) {
+            const layerNum = i.toString().padStart(4, '0');
+            this.load.image(`layer_${layerNum}`, `assets/background/Layer_${layerNum}.png`);
         }
 
         // Load ground layers
-        this.load.image('ground-layer-0', 'assets/Layer_0000.png');
-        this.load.image('ground-layer-1', 'assets/Layer_0001.png');
-        console.log('Loading ground layers from Layer_0000.png and Layer_0001.png');
+        this.load.image('ground_back', 'assets/background/Layer_0001.png');
+        this.load.image('ground_front', 'assets/background/Layer_0000.png');
 
         // Avatar run frames - fixed to 21x32
         this.load.spritesheet('avatar_run', 'assets/character/spritesheet.png', { frameWidth: 21, frameHeight: 32 });
@@ -89,9 +86,10 @@ export default class Play extends Phaser.Scene {
         this.engine = new TypingEngine(firstWord);
 
         // Set camera background to transparent
-        this.cameras.main.setBackgroundColor('rgba(0, 0, 0, 0)');
+        // this.cameras.main.setBackgroundColor('rgba(0, 0, 0, 0)');
+        this.cameras.main.setBackgroundColor('#94AAB0');
 
-        // Create parallax background with the plx files
+        // Create parallax background with the layers
         this.createParallaxBackground();
 
         // Add ground layers
@@ -249,11 +247,6 @@ export default class Play extends Phaser.Scene {
         });
     }
 
-    createGround() {
-        // Remove old ground logic, as ground is now a parallax layer
-        // this.groundTiles = [];
-    }
-
     createSprites() {
         const { height } = this.scale;
         // Use sprite for avatar - adjusted scale for 32x32 frames
@@ -265,10 +258,6 @@ export default class Play extends Phaser.Scene {
 
         // Create avatar run animation if it doesn't exist
         if (!this.anims.exists('avatar-run')) {
-            // Check how many frames are available in the spritesheet
-            // const textureManager = this.textures.get('avatar_run');
-            // const frameCount = textureManager.frameTotal;
-
             // Force use of 8 frames regardless of what Phaser detects
             this.anims.create({
                 key: 'avatar-run',
@@ -276,10 +265,6 @@ export default class Play extends Phaser.Scene {
                 frameRate: 12,
                 repeat: -1
             })
-
-            // Log the created animation for debugging
-            const anim = this.anims.get('avatar-run');
-            console.log(`Animation created with ${anim.frames.length} frames`);
         }
 
         // Play animation after ensuring it exists
@@ -321,12 +306,24 @@ export default class Play extends Phaser.Scene {
 
     update() {
         if (!this.gameOverTriggered && !this.settingsModalOpen) {
-            // Parallax background movement (furthest to closest, slowest to fastest)
-            const speeds = [0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.5]; // Added speeds for ground layers
+            // Calculate base speed factor based on obstacle speed
+            const baseSpeed = this.obstacleSpeed * 0.5;
+
+            // Update background layers with parallax effect
+            // Farthest layers (higher numbers) move slowest
             for (let i = 0; i < this.backgroundLayers.length; i++) {
-                // Use appropriate speed based on layer index
-                const speedIndex = Math.min(i, speeds.length - 1);
-                this.backgroundLayers[i].tilePositionX += this.obstacleSpeed * speeds[speedIndex];
+                // Calculate speed factor based on layer position (0 = closest, length-1 = farthest)
+                // Reverse the index to make higher layers move slower
+                const layerIndex = this.backgroundLayers.length - 1 - i;
+                const speedFactor = 0.1 + (layerIndex * 0.1); // 0.1, 0.2, 0.3, etc.
+                this.backgroundLayers[i].tilePositionX += baseSpeed * speedFactor;
+            }
+
+            // Update ground layers - these move faster than backgrounds
+            for (let i = 0; i < this.groundLayers.length; i++) {
+                // Ground layers move at full speed or slightly faster
+                const speedFactor = 1.0 + (i * 0.2); // 1.0, 1.2 for front and back
+                this.groundLayers[i].tilePositionX += baseSpeed * speedFactor;
             }
 
             // Move obstacle from right to left (instead of moving avatar)
@@ -427,42 +424,49 @@ export default class Play extends Phaser.Scene {
     // Create ground layers using Layer_0000.png and Layer_0001.png
     createGroundLayers() {
         const { width, height } = this.scale;
+        this.groundLayers = [];
 
-        // Add Layer_0001.png (further back ground layer)
-        if (this.textures.exists('ground-layer-1')) {
-            const groundLayer1 = this.add.tileSprite(0, height - 120, width, 120, 'ground-layer-1')
+        // Add Layer_0001.png (back ground layer)
+        if (this.textures.exists('ground_back')) {
+            const groundLayer1 = this.add.tileSprite(0, 0, width, height, 'ground_back')
                 .setOrigin(0, 0)
-                .setDepth(-1); // Just above the background, below the foreground
-            console.log('Added ground layer 1 (Layer_0001.png)');
-            this.backgroundLayers.push(groundLayer1);
+                .setDepth(-1); // Above all background layers
+            this.groundLayers.push(groundLayer1);
         }
 
         // Add Layer_0000.png (front ground layer)
-        if (this.textures.exists('ground-layer-0')) {
-            const groundLayer0 = this.add.tileSprite(0, height - 60, width, 60, 'ground-layer-0')
+        if (this.textures.exists('ground_front')) {
+            const groundLayer0 = this.add.tileSprite(0, 0, width, height, 'ground_front')
                 .setOrigin(0, 0)
-                .setDepth(0); // Above the background layer 1, below the sprites
-            console.log('Added ground layer 0 (Layer_0000.png)');
-            this.backgroundLayers.push(groundLayer0);
+                .setDepth(0); // Above the back ground layer
+            this.groundLayers.push(groundLayer0);
         }
     }
 
-    // Create a parallax background using the plx files
+    // Create a parallax background using the Layer_00XX.png files
     createParallaxBackground() {
         // Clear any previous background layers
         this.backgroundLayers = [];
+        const { width, height } = this.scale;
 
-        // Create layers from back to front (plx-1 to plx-5)
-        for (let i = 1; i <= 5; i++) {
-            if (this.textures.exists(`plx-${i}`)) {
-                const layer = this.add.tileSprite(0, 0, 1280, 720, `plx-${i}`)
+
+        // Create layers from back to front (Layer_0011 to Layer_0002)
+        for (let i = 2; i <= 11; i++) {
+            const layerNum = i.toString().padStart(4, '0');
+            const layerKey = `layer_${layerNum}`;
+
+            if (this.textures.exists(layerKey)) {
+                // Calculate depth: farthest (Layer_0011) = -9, closest (Layer_0002) = 0
+                const depth = -1 * i; // This gives -9 for i=2, up to 0 for i=11
+
+                const layer = this.add.tileSprite(0, 0, width, height, layerKey)
                     .setOrigin(0)
-                    .setDisplaySize(1280, 720)
-                    .setDepth(-10 + i); // Use negative depth to ensure backgrounds are behind everything
+                    .setScrollFactor(0)
+                    .setDepth(depth);
+
                 this.backgroundLayers.push(layer);
-                console.log(`Added plx-${i} as background layer`);
             } else {
-                console.warn(`Texture plx-${i} not found`);
+                console.warn(`Texture ${layerKey} not found`);
             }
         }
     }
@@ -473,12 +477,6 @@ export default class Play extends Phaser.Scene {
         const ground = this.add.graphics();
         ground.fillStyle(0x228B22, 0.5); // Semi-transparent green
         ground.fillRect(0, 600, 1280, 120);
-    }
-
-    // Replace the old createFallbackBackground with this minimal version
-    createFallbackBackground() {
-        // No longer used - redirect to minimal background
-        this.createMinimalBackground();
     }
 
     createFullscreenButton() {

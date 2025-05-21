@@ -6,7 +6,103 @@
     <title>Yatiksu</title>
   </head>
   <body style="background: #222; margin: 0">
-    <div id="app"></div>
+    <div
+      style="
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        min-height: 100vh;
+        justify-content: center;
+        background: #222;
+      "
+    >
+      <button
+        id="fullscreen-btn"
+        style="
+          margin-bottom: 1.2rem;
+          font-size: 1.1rem;
+          padding: 0.5em 1.2em;
+          background: #333;
+          color: #0ff;
+          border: 1px solid #0ff;
+          border-radius: 8px;
+          cursor: pointer;
+          box-shadow: 0 2px 12px #0008;
+          transition: background 0.2s, border 0.2s;
+        "
+      >
+        Full Screen
+      </button>
+      <div id="app"></div>
+      <div
+        id="game-info"
+        style="
+          max-width: 600px;
+          color: #fff;
+          margin-bottom: 2.2rem;
+          text-align: center;
+          font-size: 1.13rem;
+          font-family: 'Inter', 'Avenir', 'Segoe UI', Arial, sans-serif;
+          background: rgba(30, 30, 40, 0.55);
+          border-radius: 18px;
+          padding: 1.6rem 2.2rem 1.6rem 2.2rem;
+          box-shadow: 0 4px 32px #000a, 0 0 0 2px #0ff4;
+          backdrop-filter: blur(8px) saturate(1.2);
+          border: 2.5px solid transparent;
+          background-clip: padding-box, border-box;
+          border-image: linear-gradient(120deg, #0ff, #a0f, #0ff 90%) 1;
+          animation: borderGlow 3s linear infinite;
+          position: relative;
+        "
+      >
+        <b
+          style="
+            font-size: 1.25em;
+            letter-spacing: 0.04em;
+            color: #0ff;
+            text-shadow: 0 2px 8px #0ff4;
+          "
+          >Yatiksu</b
+        >
+        <div style="margin-top: 0.5em">
+          Type words to help your avatar dodge obstacles!
+        </div>
+        <ul
+          style="
+            text-align: left;
+            margin: 1.1em 0 0 1.2em;
+            padding: 0;
+            font-size: 1em;
+            line-height: 1.7;
+            color: #eaf6fa;
+            font-family: inherit;
+          "
+        >
+          <li>Type the word above the obstacle before your avatar collides.</li>
+          <li>Each correct word increases your score and speed.</li>
+          <li>3 lives. Lose one if you hit an obstacle. Game over at 0.</li>
+          <!-- <li>
+            Power-ups: <b style="color: #0ff">ICE</b> (freeze) and
+            <b style="color: #f0f">BOMB</b> (clear obstacle).
+          </li> -->
+          <li>Press <b>ESC</b> for settings. Try for a high score!</li>
+        </ul>
+      </div>
+    </div>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap");
+      @keyframes borderGlow {
+        0% {
+          box-shadow: 0 4px 32px #0ff4, 0 0 0 2px #0ff4;
+        }
+        50% {
+          box-shadow: 0 4px 32px #a0f4, 0 0 0 2px #a0f4;
+        }
+        100% {
+          box-shadow: 0 4px 32px #0ff4, 0 0 0 2px #0ff4;
+        }
+      }
+    </style>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

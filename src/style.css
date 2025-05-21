@@ -28,7 +28,7 @@ body {
   place-items: center;
   min-width: 320px;
   min-height: 100vh;
-  background: #222;
+  background: linear-gradient(135deg, #23243a 0%, #181820 100%);
 }
 
 h1 {
@@ -41,6 +41,10 @@ h1 {
   margin: 0 auto;
   padding: 2rem;
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 
 .logo {
@@ -101,4 +105,21 @@ canvas {
   display: block;
   margin: 0 auto;
   outline: none;
+  box-shadow: 0 4px 32px #000a, 0 0 0 8px #111b;
+  background: #222;
+  border-radius: 12px;
+}
+
+.fullscreen-canvas {
+  position: fixed !important;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw !important;
+  height: 100vh !important;
+  margin: 0 !important;
+  z-index: 1000;
+  border-radius: 0 !important;
+  box-shadow: none !important;
 }

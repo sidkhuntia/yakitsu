@@ -51,8 +51,12 @@
 - [ ] the avatar should have different animations when it runs
 - [ ] Add game over screen, it should show the score and a button to restart the game
 
-
-
-
+---
+## Refactor: Player/Obstacle/Background/Score Improvements
+- [ ] Refactor movement logic: player moves, obstacle fixed
+- [ ] On word complete, destroy and respawn obstacle
+- [ ] Fix obstacle y-position to align with ground
+- [ ] Move ground tiles for background movement effect
+- [ ] Update settings to only clear the game's storage key, not all localStorage
 
 *Refer to `app.md` for detailed specs and sprint plan. Mark items as complete as you progress.* 

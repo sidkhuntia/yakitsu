@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
-import { updateSettings, loadData } from './persistence';
-import { saveRun } from './persistence';
+import { updateSettings, loadData, saveRun } from './persistence';
+
 
 export class SettingsModal extends Phaser.GameObjects.Container {
     private bg: Phaser.GameObjects.Rectangle;

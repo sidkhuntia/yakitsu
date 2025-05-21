@@ -12,7 +12,7 @@ const config: Phaser.Types.Core.GameConfig = {
   pixelArt: true,
   scene: [Boot, Menu, Play, GameOver],
   parent: 'app',
-  // dom: { createContainer: true }, // Removed DOM plugin for outside fullscreen button
+
 };
 
 new Phaser.Game(config);

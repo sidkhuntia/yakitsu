@@ -16,7 +16,7 @@ export default class Play extends Phaser.Scene {
     private infoText!: Phaser.GameObjects.Text;
     private avatar!: Phaser.GameObjects.Sprite;
     private obstacle!: Phaser.GameObjects.Image;
-    private groundTiles: Phaser.GameObjects.Image[] = [];
+    // private groundTiles: Phaser.GameObjects.Image[] = [];
     private score: number = 0;
     private combo: number = 0;
     private lives: number = 3;
@@ -36,15 +36,17 @@ export default class Play extends Phaser.Scene {
     private obstacleSpeed = 2;
     private settingsModalOpen = false;
     private backgroundLayers: Phaser.GameObjects.TileSprite[] = [];
-    private avatarMoving: boolean = false;
+    // private avatarMoving: boolean = false;
     private fullscreenBtn!: Phaser.GameObjects.DOMElement;
+    private fullscreenChangeHandler?: () => void;
+    private resizeHandler?: () => void;
 
     constructor() {
         super('Play');
     }
 
     preload() {
-        this.load.image('avatar', 'assets/avatar.png');
+
         this.load.image('ground', 'assets/ground.png');
         this.load.image('obstacle', 'assets/obstacle.png');
         this.load.image('ice', 'assets/ice.png');
@@ -65,7 +67,7 @@ export default class Play extends Phaser.Scene {
         this.load.image('ground-layer-1', 'assets/Layer_0001.png');
         console.log('Loading ground layers from Layer_0000.png and Layer_0001.png');
 
-        // Avatar run frames - fixed to 32x32
+        // Avatar run frames - fixed to 21x32
         this.load.spritesheet('avatar_run', 'assets/character/spritesheet.png', { frameWidth: 21, frameHeight: 32 });
 
         // Add load error handler
@@ -249,7 +251,7 @@ export default class Play extends Phaser.Scene {
 
     createGround() {
         // Remove old ground logic, as ground is now a parallax layer
-        this.groundTiles = [];
+        // this.groundTiles = [];
     }
 
     createSprites() {
@@ -264,16 +266,16 @@ export default class Play extends Phaser.Scene {
         // Create avatar run animation if it doesn't exist
         if (!this.anims.exists('avatar-run')) {
             // Check how many frames are available in the spritesheet
-            const textureManager = this.textures.get('avatar_run');
-            const frameCount = textureManager.frameTotal;
+            // const textureManager = this.textures.get('avatar_run');
+            // const frameCount = textureManager.frameTotal;
 
             // Force use of 8 frames regardless of what Phaser detects
             this.anims.create({
                 key: 'avatar-run',
-                frames: this.anims.generateFrameNumbers('avatar_run', { start: 0, end: 7, first: 7 }),
+                frames: this.anims.generateFrameNumbers('avatar_run', { start: 0, end: 7 }),
                 frameRate: 12,
                 repeat: -1
-            });
+            })
 
             // Log the created animation for debugging
             const anim = this.anims.get('avatar-run');
@@ -505,25 +507,47 @@ export default class Play extends Phaser.Scene {
 
         btn.onclick = async () => {
             const canvas = this.sys.game.canvas;
-            if (!document.fullscreenElement) {
-                await canvas.requestFullscreen();
-                btn.style.border = '2px solid #fff';
-            } else {
-                await document.exitFullscreen();
-                btn.style.border = '2px solid #0ff';
+            try {
+                if (!document.fullscreenElement) {
+                    await canvas.requestFullscreen();
+                    btn.style.border = '2px solid #fff';
+                } else {
+                    await document.exitFullscreen();
+                    btn.style.border = '2px solid #0ff';
+                }
+            } catch (err) {
+                console.warn('Fullscreen request failed:', err);
             }
         };
 
         this.fullscreenBtn = this.add.dom(this.scale.width - 40, 40, btn).setOrigin(1, 0).setDepth(100);
-        this.scale.on('resize', () => {
+
+        // Store the resize handler so it can be removed later
+        this.resizeHandler = () => {
             this.fullscreenBtn.setPosition(this.scale.width - 40, 40);
-        });
-        document.addEventListener('fullscreenchange', () => {
+        };
+        this.scale.on('resize', this.resizeHandler);
+
+        // Store the fullscreenchange handler so it can be removed later
+        this.fullscreenChangeHandler = () => {
             if (!document.fullscreenElement) {
                 btn.style.border = '2px solid #0ff';
             } else {
                 btn.style.border = '2px solid #fff';
             }
-        });
+        };
+        document.addEventListener('fullscreenchange', this.fullscreenChangeHandler);
+    }
+
+    shutdown() {
+        // Remove event listeners to prevent memory leaks
+        if (this.resizeHandler) {
+            this.scale.off('resize', this.resizeHandler);
+            this.resizeHandler = undefined;
+        }
+        if (this.fullscreenChangeHandler) {
+            document.removeEventListener('fullscreenchange', this.fullscreenChangeHandler);
+            this.fullscreenChangeHandler = undefined;
+        }
     }
 } 

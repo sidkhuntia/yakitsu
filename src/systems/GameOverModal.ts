@@ -9,6 +9,7 @@ export class GameOverModal extends Phaser.GameObjects.Container {
     private menuBtn: Phaser.GameObjects.Text;
     private onRestart: () => void;
     private onMenu: () => void;
+    private escKeyHandler?: () => void;
 
     constructor(scene: Phaser.Scene, score: number, bestScore: number, onRestart: () => void, onMenu: () => void) {
         super(scene);
@@ -52,11 +53,20 @@ export class GameOverModal extends Phaser.GameObjects.Container {
             this.destroy();
             this.onMenu();
         });
-        scene.input.keyboard!.on('keydown-ESC', () => {
+        this.escKeyHandler = () => {
             this.destroy();
             this.onMenu();
-        });
+        };
+        scene.input.keyboard!.on('keydown-ESC', this.escKeyHandler);
         this.setInteractive(new Phaser.Geom.Rectangle(0, 0, width, height), Phaser.Geom.Rectangle.Contains);
         this.input && (this.input.enabled = true);
+    }
+
+    destroy(fromScene?: boolean) {
+        if (this.escKeyHandler) {
+            this.scene.input.keyboard!.off('keydown-ESC', this.escKeyHandler);
+            this.escKeyHandler = undefined;
+        }
+        super.destroy(fromScene);
     }
 } 

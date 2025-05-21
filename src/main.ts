@@ -15,7 +15,7 @@ const config: Phaser.Types.Core.GameConfig = {
   // dom: { createContainer: true }, // Removed DOM plugin for outside fullscreen button
 };
 
-const game = new Phaser.Game(config);
+new Phaser.Game(config);
 
 // --- Fullscreen Button Logic ---
 window.addEventListener('DOMContentLoaded', () => {

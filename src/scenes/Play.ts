@@ -13,7 +13,7 @@ export default class Play extends Phaser.Scene {
     private caretText!: Phaser.GameObjects.Text;
     private remainingText!: Phaser.GameObjects.Text;
     private infoText!: Phaser.GameObjects.Text;
-    private avatar!: Phaser.GameObjects.Image;
+    private avatar!: Phaser.GameObjects.Sprite;
     private obstacle!: Phaser.GameObjects.Image;
     private groundTiles: Phaser.GameObjects.Image[] = [];
     private score: number = 0;
@@ -34,6 +34,8 @@ export default class Play extends Phaser.Scene {
     private inputLocked = false;
     private obstacleSpeed = 2;
     private settingsModalOpen = false;
+    private backgroundLayers: Phaser.GameObjects.TileSprite[] = [];
+    private avatarMoving: boolean = false;
 
     constructor() {
         super('Play');
@@ -48,6 +50,26 @@ export default class Play extends Phaser.Scene {
         this.load.json('easyWords', 'data/words/easy.json');
         this.load.json('mediumWords', 'data/words/medium.json');
         this.load.json('hardWords', 'data/words/hard.json');
+
+        // Load the proper parallax background layers
+        console.log('Loading parallax background assets...');
+        for (let i = 1; i <= 5; i++) {
+            this.load.image(`plx-${i}`, `assets/plx-${i}.png`);
+            console.log(`Loading plx-${i} from assets/plx-${i}.png`);
+        }
+
+        // Load ground layers
+        this.load.image('ground-layer-0', 'assets/Layer_0000.png');
+        this.load.image('ground-layer-1', 'assets/Layer_0001.png');
+        console.log('Loading ground layers from Layer_0000.png and Layer_0001.png');
+
+        // Avatar run frames - fixed to 32x32
+        this.load.spritesheet('avatar_run', 'assets/character/spritesheet.png', { frameWidth: 21, frameHeight: 32 });
+
+        // Add load error handler
+        this.load.on('loaderror', (fileObj: Phaser.Loader.File) => {
+            console.error('Error loading asset:', fileObj.key);
+        });
     }
 
     create() {
@@ -61,7 +83,16 @@ export default class Play extends Phaser.Scene {
         this.hardWords = this.cache.json.get('hardWords') || [];
         const firstWord = this.getNextWord();
         this.engine = new TypingEngine(firstWord);
-        this.createGround();
+
+        // Set camera background to transparent
+        this.cameras.main.setBackgroundColor('rgba(0, 0, 0, 0)');
+
+        // Create parallax background with the plx files
+        this.createParallaxBackground();
+
+        // Add ground layers
+        this.createGroundLayers();
+
         this.createSprites();
         this.createText();
         this.createHUD();
@@ -118,17 +149,17 @@ export default class Play extends Phaser.Scene {
         this.livesText = this.add.text(20, 20, '', {
             font: '28px monospace',
             color: '#f44',
-        }).setOrigin(0, 0);
+        }).setOrigin(0, 0).setDepth(20);
         // Score
         this.scoreText = this.add.text(this.scale.width - 20, 20, '', {
             font: '28px monospace',
             color: '#fff',
-        }).setOrigin(1, 0);
+        }).setOrigin(1, 0).setDepth(20);
         // Combo
         this.comboText = this.add.text(this.scale.width - 20, 60, '', {
             font: '20px monospace',
             color: '#0ff',
-        }).setOrigin(1, 0);
+        }).setOrigin(1, 0).setDepth(20);
     }
 
     updateHUD() {
@@ -159,8 +190,10 @@ export default class Play extends Phaser.Scene {
         this.infoText.setText('Word complete!');
         this.updateHUD();
         this.spawnPowerUp();
-        // Reset obstacle position smoothly off-screen
-        this.obstacle.setX(this.scale.width + this.obstacle.width);
+        // Destroy current obstacle and spawn a new one
+        if (this.obstacle) this.obstacle.destroy();
+        const { height } = this.scale;
+        this.obstacle = this.add.image(this.scale.width + 100, height - 80, 'obstacle').setOrigin(0.5).setScale(2);
         if (this.powerUpSprite) {
             this.powerUpSprite.setX(this.obstacle.x);
             this.powerUpSprite.setVisible(true);
@@ -181,8 +214,8 @@ export default class Play extends Phaser.Scene {
         if (this.lives <= 0) {
             this.triggerGameOver();
         } else {
-            // Reset obstacle position smoothly off-screen
-            this.obstacle.setX(this.scale.width + this.obstacle.width);
+            // Reset obstacle position smoothly off-screen to the right
+            this.obstacle.x = this.scale.width + 100;
         }
     }
 
@@ -196,24 +229,46 @@ export default class Play extends Phaser.Scene {
     }
 
     createGround() {
-        // Remove old tiles
-        this.groundTiles.forEach(tile => tile.destroy());
+        // Remove old ground logic, as ground is now a parallax layer
         this.groundTiles = [];
-        const { width, height } = this.scale;
-        const groundTile = this.textures.get('ground').getSourceImage();
-        const tileWidth = groundTile.width;
-        const tileHeight = groundTile.height;
-        const y = height - tileHeight / 2;
-        for (let x = 0; x < width; x += tileWidth) {
-            const tile = this.add.image(x + tileWidth / 2, y, 'ground').setOrigin(0.5);
-            this.groundTiles.push(tile);
-        }
     }
 
     createSprites() {
         const { height } = this.scale;
-        this.avatar = this.add.image(80, height - 80, 'avatar').setOrigin(0.5).setScale(2);
-        this.obstacle = this.add.image(this.scale.width + 32, height - 80, 'obstacle').setOrigin(0.5).setScale(2);
+        // Use sprite for avatar - adjusted scale for 32x32 frames
+        // Keep avatar stationary at a fixed position on the left side
+        this.avatar = this.add.sprite(120, height - 80, 'avatar_run', 0)
+            .setOrigin(0.5)
+            .setScale(2)
+            .setDepth(10); // Ensure avatar is above background
+
+        // Create avatar run animation if it doesn't exist
+        if (!this.anims.exists('avatar-run')) {
+            // Check how many frames are available in the spritesheet
+            const textureManager = this.textures.get('avatar_run');
+            const frameCount = textureManager.frameTotal;
+
+            // Force use of 8 frames regardless of what Phaser detects
+            this.anims.create({
+                key: 'avatar-run',
+                frames: this.anims.generateFrameNumbers('avatar_run', { start: 0, end: 7, first: 7 }),
+                frameRate: 12,
+                repeat: -1
+            });
+
+            // Log the created animation for debugging
+            const anim = this.anims.get('avatar-run');
+            console.log(`Animation created with ${anim.frames.length} frames`);
+        }
+
+        // Play animation after ensuring it exists
+        this.avatar.play('avatar-run');
+
+        // Place obstacle at a fixed x position off-screen to the right
+        this.obstacle = this.add.image(this.scale.width + 100, height - 80, 'obstacle')
+            .setOrigin(0.5)
+            .setScale(2)
+            .setDepth(10); // Ensure obstacle is above background
     }
 
     createText() {
@@ -221,45 +276,59 @@ export default class Play extends Phaser.Scene {
         this.typedText = this.add.text(width / 2, height / 2 - 20, '', {
             font: '32px monospace',
             color: '#0f0',
-        }).setOrigin(0, 0.5);
+        }).setOrigin(0, 0.5).setDepth(20); // Ensure text is above everything
+
         this.caretText = this.add.text(0, height / 2 - 20, '', {
             font: '32px monospace',
             color: '#ff0',
-        }).setOrigin(0, 0.5);
+        }).setOrigin(0, 0.5).setDepth(20);
+
         this.remainingText = this.add.text(0, height / 2 - 20, '', {
             font: '32px monospace',
             color: '#fff',
-        }).setOrigin(0, 0.5);
+        }).setOrigin(0, 0.5).setDepth(20);
+
         this.infoText = this.add.text(width / 2, height / 2 + 40, '', {
             font: '24px monospace',
             color: '#0ff',
-        }).setOrigin(0.5);
+        }).setOrigin(0.5).setDepth(20);
     }
 
     handleResize(_gameSize: Phaser.Structs.Size) {
-        this.createGround();
-        // Reposition avatar and obstacle
-        const { height } = this.scale;
-
-        if (this.avatar) this.avatar.setY(height - 80);
-        if (this.obstacle) this.obstacle.setY(height - 80);
-        this.updateWordDisplay();
-        if (this.infoText) this.infoText.setY(height / 2 + 40);
-        this.updateHUD();
+        // No-op for fixed size
     }
 
     update() {
-        if (this.obstacle && !this.gameOverTriggered && !this.settingsModalOpen) {
+        if (!this.gameOverTriggered && !this.settingsModalOpen) {
+            // Parallax background movement (furthest to closest, slowest to fastest)
+            const speeds = [0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.5]; // Added speeds for ground layers
+            for (let i = 0; i < this.backgroundLayers.length; i++) {
+                // Use appropriate speed based on layer index
+                const speedIndex = Math.min(i, speeds.length - 1);
+                this.backgroundLayers[i].tilePositionX += this.obstacleSpeed * speeds[speedIndex];
+            }
+
+            // Move obstacle from right to left (instead of moving avatar)
             if (!this.obstacleFrozen) {
-                this.obstacle.x -= this.obstacleSpeed;
-                if (this.powerUpSprite && this.powerUpSprite.visible) {
-                    this.powerUpSprite.x = this.obstacle.x;
+                this.obstacle.x -= this.obstacleSpeed * 2; // Move obstacle towards the player
+
+                // Reset obstacle position when it moves off-screen to the left
+                if (this.obstacle.x < -100) {
+                    this.obstacle.x = this.scale.width + 100;
+                    // Spawn a new word when obstacle resets
+                    if (this.engine.isComplete()) {
+                        this.handleWordComplete();
+                    }
                 }
             }
+
+            // Check collision
             const avatarBounds = this.avatar.getBounds();
             const obstacleBounds = this.obstacle.getBounds();
             if (Phaser.Geom.Intersects.RectangleToRectangle(avatarBounds, obstacleBounds)) {
                 this.loseLife();
+                // Move obstacle off-screen after collision
+                this.obstacle.x = this.scale.width + 100;
             }
         }
     }
@@ -332,5 +401,62 @@ export default class Play extends Phaser.Scene {
             });
         }
         this.powerUpType = null;
+    }
+
+    // Create ground layers using Layer_0000.png and Layer_0001.png
+    createGroundLayers() {
+        const { width, height } = this.scale;
+
+        // Add Layer_0001.png (further back ground layer)
+        if (this.textures.exists('ground-layer-1')) {
+            const groundLayer1 = this.add.tileSprite(0, height - 120, width, 120, 'ground-layer-1')
+                .setOrigin(0, 0)
+                .setDepth(-1); // Just above the background, below the foreground
+            console.log('Added ground layer 1 (Layer_0001.png)');
+            this.backgroundLayers.push(groundLayer1);
+        }
+
+        // Add Layer_0000.png (front ground layer)
+        if (this.textures.exists('ground-layer-0')) {
+            const groundLayer0 = this.add.tileSprite(0, height - 60, width, 60, 'ground-layer-0')
+                .setOrigin(0, 0)
+                .setDepth(0); // Above the background layer 1, below the sprites
+            console.log('Added ground layer 0 (Layer_0000.png)');
+            this.backgroundLayers.push(groundLayer0);
+        }
+    }
+
+    // Create a parallax background using the plx files
+    createParallaxBackground() {
+        // Clear any previous background layers
+        this.backgroundLayers = [];
+
+        // Create layers from back to front (plx-1 to plx-5)
+        for (let i = 1; i <= 5; i++) {
+            if (this.textures.exists(`plx-${i}`)) {
+                const layer = this.add.tileSprite(0, 0, 1280, 720, `plx-${i}`)
+                    .setOrigin(0)
+                    .setDisplaySize(1280, 720)
+                    .setDepth(-10 + i); // Use negative depth to ensure backgrounds are behind everything
+                this.backgroundLayers.push(layer);
+                console.log(`Added plx-${i} as background layer`);
+            } else {
+                console.warn(`Texture plx-${i} not found`);
+            }
+        }
+    }
+
+    // Keep the minimal background as a fallback
+    createMinimalBackground() {
+        // Just add a simple ground
+        const ground = this.add.graphics();
+        ground.fillStyle(0x228B22, 0.5); // Semi-transparent green
+        ground.fillRect(0, 600, 1280, 120);
+    }
+
+    // Replace the old createFallbackBackground with this minimal version
+    createFallbackBackground() {
+        // No longer used - redirect to minimal background
+        this.createMinimalBackground();
     }
 } 

@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { updateSettings, loadData } from './persistence';
+import { saveRun } from './persistence';
 
 export class SettingsModal extends Phaser.GameObjects.Container {
     private bg: Phaser.GameObjects.Rectangle;
@@ -41,7 +42,8 @@ export class SettingsModal extends Phaser.GameObjects.Container {
             this.refresh();
         });
         this.clearBtn.on('pointerdown', () => {
-            localStorage.clear();
+            localStorage.removeItem('yatiksu-save-v1');
+            saveRun(0);
             this.refresh();
         });
         this.closeBtn.on('pointerdown', () => {

@@ -50,10 +50,6 @@ export class SettingsModal extends Phaser.GameObjects.Container {
             this.destroy();
             this.onClose();
         });
-        scene.input.keyboard!.on('keydown-ESC', () => {
-            this.destroy();
-            this.onClose();
-        });
         this.setInteractive(new Phaser.Geom.Rectangle(0, 0, width, height), Phaser.Geom.Rectangle.Contains);
         this.input && (this.input.enabled = true);
     }

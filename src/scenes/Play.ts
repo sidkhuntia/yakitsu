@@ -46,6 +46,7 @@ export default class Play extends Phaser.Scene {
     private fullscreenChangeHandler?: () => void;
     private resizeHandler?: () => void;
     private speedMultiplier = 1.1;
+    private escKeyHandler: (event: KeyboardEvent) => void = () => this.handleEscKey();
 
     constructor() {
         super('Play');
@@ -156,16 +157,8 @@ export default class Play extends Phaser.Scene {
             }
         });
 
-        this.input.keyboard!.on('keydown-ESC', () => {
-            if (this.settingsModalOpen) return;
-            this.settingsModalOpen = true;
-            this.input.keyboard!.enabled = false;
-            const modal = new SettingsModal(this, () => {
-                this.settingsModalOpen = false;
-                this.input.keyboard!.enabled = true;
-            });
-            this.children.add(modal);
-        });
+        // Set up the ESC key handler
+        this.input.keyboard!.on('keydown-ESC', this.escKeyHandler);
 
         this.scale.on('resize', this.handleResize, this);
         this.createFullscreenButton();
@@ -578,6 +571,9 @@ export default class Play extends Phaser.Scene {
             document.removeEventListener('fullscreenchange', this.fullscreenChangeHandler);
             this.fullscreenChangeHandler = undefined;
         }
+
+        // Remove the ESC key handler
+        this.input.keyboard?.off('keydown-ESC', this.escKeyHandler);
     }
 
     // Add a new method to spawn a monster with optional death animation
@@ -623,5 +619,51 @@ export default class Play extends Phaser.Scene {
 
         this.baseObstacleSpeed = this.baseObstacleSpeed * (1 + speedIncrease * 0.1);
         this.obstacleSpeed = this.baseObstacleSpeed;
+    }
+
+    // Add a new method to pause/resume game animations
+    pauseGameAnimations(pause: boolean) {
+        // Pause/resume monster animations
+        if (this.monster) {
+            if (pause) {
+                this.monster.anims.pause();
+            } else {
+                this.monster.anims.resume();
+            }
+        }
+
+        // Pause/resume avatar animations
+        if (this.avatar) {
+            if (pause) {
+                this.avatar.anims.pause();
+            } else {
+                this.avatar.anims.resume();
+            }
+        }
+
+        // Pause/resume background movement by setting a flag
+        this.obstacleFrozen = pause;
+    }
+
+    handleEscKey() {
+        if (this.settingsModalOpen) return;
+
+        this.settingsModalOpen = true;
+        this.input.keyboard!.enabled = false;
+
+        // Pause animations and game physics
+        this.pauseGameAnimations(true);
+
+        const modal = new SettingsModal(this, () => {
+            this.settingsModalOpen = false;
+            this.input.keyboard!.enabled = true;
+
+            // Resume animations and game physics
+            this.pauseGameAnimations(false);
+        });
+        this.children.add(modal);
+
+        // Set higher depth to ensure modal appears above all game elements
+        modal.setDepth(100);
     }
 } 

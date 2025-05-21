@@ -3,6 +3,8 @@ import { TypingEngine } from '../systems/typingEngine';
 import { loadData } from '../systems/persistence';
 import { SettingsModal } from '../systems/SettingsModal';
 import { GameOverModal } from '../systems/GameOverModal';
+import { Monster } from '../systems/Monster';
+import type { MonsterType } from '../systems/Monster';
 
 function getRandom(arr: string[]): string {
     return arr[Math.floor(Math.random() * arr.length)];
@@ -15,7 +17,7 @@ export default class Play extends Phaser.Scene {
     private remainingText!: Phaser.GameObjects.Text;
     private infoText!: Phaser.GameObjects.Text;
     private avatar!: Phaser.GameObjects.Sprite;
-    private obstacle!: Phaser.GameObjects.Image;
+    private monster!: Monster;
     // private groundTiles: Phaser.GameObjects.Image[] = [];
     private score: number = 0;
     private combo: number = 0;
@@ -41,13 +43,13 @@ export default class Play extends Phaser.Scene {
     private fullscreenBtn!: Phaser.GameObjects.DOMElement;
     private fullscreenChangeHandler?: () => void;
     private resizeHandler?: () => void;
+    private speedMultiplier = 1.1;
 
     constructor() {
         super('Play');
     }
 
     preload() {
-        this.load.image('obstacle', 'assets/obstacle.png');
         this.load.image('ice', 'assets/ice.png');
         this.load.image('bomb', 'assets/bomb.png');
         this.load.json('easyWords', 'data/words/easy.json');
@@ -66,6 +68,24 @@ export default class Play extends Phaser.Scene {
 
         // Avatar run frames - fixed to 21x32
         this.load.spritesheet('avatar_run', 'assets/character/spritesheet.png', { frameWidth: 21, frameHeight: 32 });
+
+        // Load monster spritesheets
+        const monsterTypes: MonsterType[] = ['Skeleton', 'Flying eye', 'Mushroom', 'Goblin'];
+        monsterTypes.forEach(type => {
+            // Run animation
+            this.load.spritesheet(
+                `monster_${type}_run`,
+                `assets/monsters/${type}/Run.png`,
+                { frameWidth: 150, frameHeight: 150 }
+            );
+
+            // Death animation
+            this.load.spritesheet(
+                `monster_${type}_death`,
+                `assets/monsters/${type}/Death.png`,
+                { frameWidth: 150, frameHeight: 150 }
+            );
+        });
 
         // Add load error handler
         this.load.on('loaderror', (fileObj: Phaser.Loader.File) => {
@@ -120,9 +140,9 @@ export default class Play extends Phaser.Scene {
                 this.combo = 0;
                 this.updateHUD();
                 this.infoText.setText('Wrong key!');
-                // Speed up obstacle for 1s
-                this.obstacleSpeed = this.obstacleSpeed * 1.20;
-                this.time.delayedCall(500, () => { this.obstacleSpeed = this.obstacleSpeed / 1.20; });
+                // Speed up monster for 500ms
+                this.obstacleSpeed = this.obstacleSpeed * this.speedMultiplier;
+                this.time.delayedCall(500, () => { this.obstacleSpeed = this.obstacleSpeed / this.speedMultiplier; });
                 // Lock input if setting enabled
                 const { lockInputOnMistake } = loadData().settings;
                 if (lockInputOnMistake) {
@@ -193,14 +213,10 @@ export default class Play extends Phaser.Scene {
         this.infoText.setText('Word complete!');
         this.updateHUD();
         this.spawnPowerUp();
-        // Destroy current obstacle and spawn a new one
-        if (this.obstacle) this.obstacle.destroy();
-        const { height } = this.scale;
-        this.obstacle = this.add.image(this.scale.width + 100, height - 80, 'obstacle').setOrigin(0.5).setScale(2);
-        if (this.powerUpSprite) {
-            this.powerUpSprite.setX(this.obstacle.x);
-            this.powerUpSprite.setVisible(true);
-        }
+
+        // Spawn new monster
+        this.spawnNewMonster();
+
         // Pick next word
         const nextWord = this.getNextWord();
         this.engine.reset(nextWord);
@@ -217,8 +233,8 @@ export default class Play extends Phaser.Scene {
         if (this.lives <= 0) {
             this.triggerGameOver();
         } else {
-            // Reset obstacle position smoothly off-screen to the right
-            this.obstacle.x = this.scale.width + 100;
+            // Reset monster by spawning a new one
+            this.spawnNewMonster();
         }
     }
 
@@ -253,7 +269,7 @@ export default class Play extends Phaser.Scene {
         // Keep avatar stationary at a fixed position on the left side
         this.avatar = this.add.sprite(120, height - 80, 'avatar_run', 0)
             .setOrigin(0.5)
-            .setScale(2)
+            .setScale(2.5)
             .setDepth(10); // Ensure avatar is above background
 
         // Create avatar run animation if it doesn't exist
@@ -270,11 +286,10 @@ export default class Play extends Phaser.Scene {
         // Play animation after ensuring it exists
         this.avatar.play('avatar-run');
 
-        // Place obstacle at a fixed x position off-screen to the right
-        this.obstacle = this.add.image(this.scale.width + 100, height - 80, 'obstacle')
-            .setOrigin(0.5)
-            .setScale(2)
-            .setDepth(10); // Ensure obstacle is above background
+        // Create a monster instead of an obstacle
+        const monsterType = Monster.getRandomType();
+        this.monster = new Monster(this, this.scale.width + 100, height - 80, monsterType);
+        this.add.existing(this.monster);
     }
 
     createText() {
@@ -326,14 +341,16 @@ export default class Play extends Phaser.Scene {
                 this.groundLayers[i].tilePositionX += baseSpeed * speedFactor;
             }
 
-            // Move obstacle from right to left (instead of moving avatar)
+            // Move monster from right to left (instead of moving avatar)
             if (!this.obstacleFrozen) {
-                this.obstacle.x -= this.obstacleSpeed * 2; // Move obstacle towards the player
+                this.monster.x -= this.obstacleSpeed * 2; // Move monster towards the player
 
-                // Reset obstacle position when it moves off-screen to the left
-                if (this.obstacle.x < -100) {
-                    this.obstacle.x = this.scale.width + 100;
-                    // Spawn a new word when obstacle resets
+                // Reset monster position when it moves off-screen to the left
+                if (this.monster.x < -100) {
+                    // Spawn new monster without death animation (it's off-screen)
+                    this.spawnNewMonster(false);
+
+                    // Spawn a new word when monster resets
                     if (this.engine.isComplete()) {
                         this.handleWordComplete();
                     }
@@ -342,11 +359,11 @@ export default class Play extends Phaser.Scene {
 
             // Check collision
             const avatarBounds = this.avatar.getBounds();
-            const obstacleBounds = this.obstacle.getBounds();
-            if (Phaser.Geom.Intersects.RectangleToRectangle(avatarBounds, obstacleBounds)) {
+            const monsterBounds = this.monster.getBounds();
+            if (Phaser.Geom.Intersects.RectangleToRectangle(avatarBounds, monsterBounds)) {
                 this.loseLife();
-                // Move obstacle off-screen after collision
-                this.obstacle.x = this.scale.width + 100;
+                // Spawn a new monster with death animation
+                this.spawnNewMonster(true);
             }
         }
     }
@@ -385,11 +402,14 @@ export default class Play extends Phaser.Scene {
         if (Math.random() < 0.05) {
             this.powerUpType = Math.random() < 0.5 ? 'ice' : 'bomb';
             if (!this.powerUpSprite) {
-                this.powerUpSprite = this.add.image(this.obstacle.x, this.obstacle.y - 40, this.powerUpType).setOrigin(0.5).setScale(1.5);
+                this.powerUpSprite = this.add.image(this.monster.x, this.monster.y - 40, this.powerUpType)
+                    .setOrigin(0.5)
+                    .setScale(1.5)
+                    .setDepth(9); // Just below the monster
             } else {
                 this.powerUpSprite.setTexture(this.powerUpType);
-                this.powerUpSprite.setX(this.obstacle.x);
-                this.powerUpSprite.setY(this.obstacle.y - 40);
+                this.powerUpSprite.setX(this.monster.x);
+                this.powerUpSprite.setY(this.monster.y - 40);
                 this.powerUpSprite.setVisible(true);
             }
         }
@@ -410,7 +430,8 @@ export default class Play extends Phaser.Scene {
             if (this.powerUpSprite) {
                 this.powerUpSprite.setTint(0xff4444);
             }
-            this.obstacle.setX(this.scale.width + this.obstacle.width);
+            // Spawn a new monster with death animation for bomb
+            this.spawnNewMonster(true);
             this.time.delayedCall(200, () => {
                 if (this.powerUpSprite) {
                     this.powerUpSprite.clearTint();
@@ -546,6 +567,39 @@ export default class Play extends Phaser.Scene {
         if (this.fullscreenChangeHandler) {
             document.removeEventListener('fullscreenchange', this.fullscreenChangeHandler);
             this.fullscreenChangeHandler = undefined;
+        }
+    }
+
+    // Add a new method to spawn a monster with optional death animation
+    async spawnNewMonster(playDeathAnimation = true) {
+        if (this.monster) {
+            if (playDeathAnimation) {
+                // Disable collision detection during death animation
+                this.obstacleFrozen = true;
+
+                // Play death animation and wait for it to complete
+                await this.monster.playDeathAnimation();
+
+                // Re-enable collision detection
+                this.obstacleFrozen = false;
+            }
+
+            // Destroy the monster after animation completes
+            this.monster.destroy();
+        }
+
+        const { height } = this.scale;
+        const monsterType = Monster.getRandomType();
+
+        // Create monster at the right side of the screen
+        this.monster = new Monster(this, this.scale.width + 100, height - 80, monsterType);
+        this.add.existing(this.monster);
+
+        // Update power-up position if needed
+        if (this.powerUpSprite) {
+            this.powerUpSprite.setX(this.monster.x);
+            this.powerUpSprite.setY(this.monster.y - 40);
+            this.powerUpSprite.setVisible(this.powerUpType !== null);
         }
     }
 } 

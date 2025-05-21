@@ -88,6 +88,13 @@ export default class Play extends Phaser.Scene {
                 `assets/monsters/${type}/Death.png`,
                 { frameWidth: 150, frameHeight: 150 }
             );
+
+            // Hit animation
+            this.load.spritesheet(
+                `monster_${type}_hit`,
+                `assets/monsters/${type}/Take Hit.png`,
+                { frameWidth: 150, frameHeight: 150 }
+            );
         });
 
         // Add load error handler
@@ -134,6 +141,10 @@ export default class Play extends Phaser.Scene {
             this.updateWordDisplay();
             if (ok) {
                 this.flashCaret('#0f0');
+                // Play hit animation on correct key press
+                if (this.monster) {
+                    this.monster.playHitAnimation();
+                }
                 if (this.engine.isComplete()) {
                     if (this.powerUpType) {
                         this.handlePowerUp();
@@ -281,7 +292,7 @@ export default class Play extends Phaser.Scene {
             this.anims.create({
                 key: 'avatar-run',
                 frames: this.anims.generateFrameNumbers('avatar_run', { start: 0, end: 7 }),
-                frameRate: 12,
+                frameRate: 8,
                 repeat: -1
             })
         }

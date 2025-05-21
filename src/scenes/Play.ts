@@ -70,7 +70,7 @@ export default class Play extends Phaser.Scene {
         this.load.image('ground_front', 'assets/background/Layer_0000.png');
 
         // Avatar run frames - fixed to 21x32
-        this.load.spritesheet('avatar_run', 'assets/character/spritesheet.png', { frameWidth: 21, frameHeight: 32 });
+        this.load.spritesheet('avatar_run', 'assets/character/Run.png', { frameWidth: 180, frameHeight: 180 });
 
         // Load monster spritesheets
         const monsterTypes: MonsterType[] = ['Skeleton', 'Flying eye', 'Mushroom', 'Goblin'];
@@ -156,10 +156,10 @@ export default class Play extends Phaser.Scene {
                 this.combo = 0;
                 this.updateHUD();
                 this.infoText.setText('Wrong key!');
-                // Speed up monster for 500ms
-                this.obstacleSpeed = this.obstacleSpeed * this.speedMultiplier;
-                this.time.delayedCall(500, () => { this.obstacleSpeed = this.obstacleSpeed / this.speedMultiplier; });
-                // Lock input if setting enabled
+                this.obstacleSpeed *= this.speedMultiplier;
+                this.time.delayedCall(500, () => {
+                    this.obstacleSpeed /= this.speedMultiplier;
+                });
                 const { lockInputOnMistake } = loadData().settings;
                 if (lockInputOnMistake) {
                     this.inputLocked = true;
@@ -281,9 +281,9 @@ export default class Play extends Phaser.Scene {
         const { height } = this.scale;
         // Use sprite for avatar - adjusted scale for 32x32 frames
         // Keep avatar stationary at a fixed position on the left side
-        this.avatar = this.add.sprite(120, height - 80, 'avatar_run', 0)
+        this.avatar = this.add.sprite(120, height - 90, 'avatar_run', 0)
             .setOrigin(0.5)
-            .setScale(2.5)
+            .setScale(2)
             .setDepth(10); // Ensure avatar is above background
 
         // Create avatar run animation if it doesn't exist
@@ -292,7 +292,7 @@ export default class Play extends Phaser.Scene {
             this.anims.create({
                 key: 'avatar-run',
                 frames: this.anims.generateFrameNumbers('avatar_run', { start: 0, end: 7 }),
-                frameRate: 8,
+                frameRate: 10,
                 repeat: -1
             })
         }
@@ -609,7 +609,7 @@ export default class Play extends Phaser.Scene {
         const monsterType = Monster.getRandomType();
 
         // Create monster at the right side of the screen
-        this.monster = new Monster(this, this.scale.width + 100, height - 80, monsterType);
+        this.monster = new Monster(this, this.scale.width + 10, height - 80, monsterType);
         this.add.existing(this.monster);
 
         // Update power-up position if needed

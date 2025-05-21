@@ -19,21 +19,23 @@ export class Monster extends Phaser.GameObjects.Sprite {
     private runAnimKey: string;
 
     constructor(scene: Phaser.Scene, x: number, y: number, type: MonsterType) {
-        super(scene, x, y, `monster_${type}_run`, 0);
-        this.monsterType = type;
-        this.runAnimKey = `monster-${type}-run`;
+        // Get config first to calculate offset position
+        const config = Monster.getFrameConfig(type);
 
-        const config = this.getFrameConfig(type);
+        // Apply position offsets before calling super
+        const adjustedX = x + config.xOffset;
+        const adjustedY = y + config.yOffset;
+
+        super(scene, adjustedX, adjustedY, `monster_${type}_run`, 0);
+        this.monsterType = type;
+        const safeType = type.toLowerCase().replace(/\s+/g, '_');
+        this.runAnimKey = `monster-${safeType}-run`;
 
         // Set origin, scale, and depth
         this.setOrigin(0.5)
             .setScale(config.scale)
             .setDepth(10)
             .setFlipX(true); // Flip horizontally to face left (towards player)
-
-        // Apply position offsets for this monster type
-        this.x += config.xOffset;
-        this.y += config.yOffset;
 
         // Create run animation if it doesn't exist
         if (!scene.anims.exists(this.runAnimKey)) {
@@ -95,6 +97,7 @@ export class Monster extends Phaser.GameObjects.Sprite {
 
             // Listen for animation complete
             this.once('animationcomplete', () => {
+                this.isDying = false;
                 resolve();
             });
         });
@@ -126,7 +129,7 @@ export class Monster extends Phaser.GameObjects.Sprite {
         });
     }
 
-    private getFrameConfig(type: MonsterType): MonsterConfig {
+    private static getFrameConfig(type: MonsterType): MonsterConfig {
         switch (type) {
             case 'Skeleton':
                 return { type, frameCount: 4, deathFrameCount: 4, hitFrameCount: 4, scale: 1.6, xOffset: 0, yOffset: 0 };
@@ -137,7 +140,7 @@ export class Monster extends Phaser.GameObjects.Sprite {
             case 'Goblin':
                 return { type, frameCount: 8, deathFrameCount: 4, hitFrameCount: 4, scale: 2, xOffset: 0, yOffset: -15 };
             default:
-                return { type, frameCount: 4, deathFrameCount: 4, hitFrameCount: 4, scale: 2, xOffset: 0, yOffset: 0 };
+                throw new Error(`Unknown monster type "${type}"`);
         }
     }
 

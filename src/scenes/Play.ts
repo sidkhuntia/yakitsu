@@ -376,8 +376,6 @@ export default class Play extends Phaser.Scene {
             const monsterBounds = this.monster.getBounds();
             if (Phaser.Geom.Intersects.RectangleToRectangle(avatarBounds, monsterBounds)) {
                 this.loseLife();
-                // Spawn a new monster with death animation
-                this.spawnNewMonster(true);
             }
         }
     }
@@ -513,7 +511,8 @@ export default class Play extends Phaser.Scene {
         ground.fillStyle(0x228B22, 0.5); // Semi-transparent green
         ground.fillRect(0, 600, 1280, 120);
     }
-
+    
+    // FIX: fullscreen button is not working, its not visible
     createFullscreenButton() {
         // Use a DOM Element for best style flexibility
         const btn = document.createElement('button');

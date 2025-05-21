@@ -36,6 +36,8 @@ export default class Play extends Phaser.Scene {
     private obstacleFrozen = false;
     private inputLocked = false;
     private obstacleSpeed = 2;
+    private baseObstacleSpeed = 2;
+    private difficultyLevel = 1;
     private settingsModalOpen = false;
     private backgroundLayers: Phaser.GameObjects.TileSprite[] = [];
     private groundLayers: Phaser.GameObjects.TileSprite[] = [];
@@ -99,6 +101,8 @@ export default class Play extends Phaser.Scene {
         this.lives = 3;
         this.gameOverTriggered = false;
         this.wordsCompleted = 0;
+        this.obstacleSpeed = this.baseObstacleSpeed;
+        this.difficultyLevel = 1;
         this.easyWords = this.cache.json.get('easyWords') || [];
         this.mediumWords = this.cache.json.get('mediumWords') || [];
         this.hardWords = this.cache.json.get('hardWords') || [];
@@ -213,6 +217,11 @@ export default class Play extends Phaser.Scene {
         this.infoText.setText('Word complete!');
         this.updateHUD();
         this.spawnPowerUp();
+
+        // Increase difficulty every 5 words
+        if (this.wordsCompleted % 5 === 0) {
+            this.increaseDifficulty();
+        }
 
         // Spawn new monster
         this.spawnNewMonster();
@@ -601,5 +610,17 @@ export default class Play extends Phaser.Scene {
             this.powerUpSprite.setY(this.monster.y - 40);
             this.powerUpSprite.setVisible(this.powerUpType !== null);
         }
+    }
+
+    // Add a new method to increase difficulty
+    increaseDifficulty() {
+        this.difficultyLevel++;
+
+        // Cap the max speed increase at 100% faster than base speed
+        const maxSpeedMultiplier = 2.0;
+        const speedIncrease = Math.min(0.1 * this.difficultyLevel, maxSpeedMultiplier);
+
+        this.baseObstacleSpeed = this.baseObstacleSpeed * (1 + speedIncrease * 0.1);
+        this.obstacleSpeed = this.baseObstacleSpeed;
     }
 } 

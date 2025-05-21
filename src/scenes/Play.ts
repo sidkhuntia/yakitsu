@@ -257,6 +257,7 @@ export default class Play extends Phaser.Scene {
         this.scoreText.setVisible(false);
         this.comboText.setVisible(false);
         this.livesText.setVisible(false);
+        this.avatar.setVisible(false);
         // Show modal overlay
         const bestScore = (typeof loadData === 'function') ? loadData().bestScore : 0;
         const modal = new GameOverModal(this, this.score, bestScore,

@@ -22,6 +22,20 @@ export default class GameOver extends Phaser.Scene {
             color: '#f44',
         }).setOrigin(0.5);
 
+        // Show congrats if new best or high score
+        let congrats = '';
+        if (this.score >= this.bestScore && this.score > 0) {
+            congrats = 'New Best! Congratulations!';
+        } else if (this.score >= 1000) {
+            congrats = 'Congratulations!';
+        }
+        if (congrats) {
+            this.add.text(width / 2, height / 2 - 110, congrats, {
+                font: '32px monospace',
+                color: '#0ff',
+            }).setOrigin(0.5);
+        }
+
         this.add.text(width / 2, height / 2, `Score: ${this.score}\nBest: ${this.bestScore}`, {
             font: '32px monospace',
             color: '#fff',

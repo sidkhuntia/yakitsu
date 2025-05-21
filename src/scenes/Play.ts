@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { TypingEngine } from '../systems/typingEngine';
 import { loadData } from '../systems/persistence';
 import { SettingsModal } from '../systems/SettingsModal';
+import { GameOverModal } from '../systems/GameOverModal';
 
 function getRandom(arr: string[]): string {
     return arr[Math.floor(Math.random() * arr.length)];
@@ -36,6 +37,7 @@ export default class Play extends Phaser.Scene {
     private settingsModalOpen = false;
     private backgroundLayers: Phaser.GameObjects.TileSprite[] = [];
     private avatarMoving: boolean = false;
+    private fullscreenBtn!: Phaser.GameObjects.DOMElement;
 
     constructor() {
         super('Play');
@@ -142,6 +144,7 @@ export default class Play extends Phaser.Scene {
         });
 
         this.scale.on('resize', this.handleResize, this);
+        this.createFullscreenButton();
     }
 
     createHUD() {
@@ -221,10 +224,26 @@ export default class Play extends Phaser.Scene {
 
     triggerGameOver() {
         this.gameOverTriggered = true;
-        this.infoText.setText('Game Over!');
-        this.scene.pause();
-        this.time.delayedCall(1000, () => {
-            this.scene.start('GameOver', { score: this.score });
+        // Hide all main game text objects to prevent overlap with modal
+        this.typedText.setVisible(false);
+        this.caretText.setVisible(false);
+        this.remainingText.setVisible(false);
+        this.infoText.setVisible(false);
+        this.scoreText.setVisible(false);
+        this.comboText.setVisible(false);
+        this.livesText.setVisible(false);
+        // Show modal overlay
+        const bestScore = (typeof loadData === 'function') ? loadData().bestScore : 0;
+        const modal = new GameOverModal(this, this.score, bestScore,
+            () => { this.scene.restart(); },
+            () => { this.scene.start('Menu'); }
+        );
+        this.children.add(modal);
+        // Fallback: also switch to GameOver scene after 10s if modal not used
+        this.time.delayedCall(10000, () => {
+            if (this.scene.isActive('Play')) {
+                this.scene.start('GameOver', { score: this.score });
+            }
         });
     }
 
@@ -458,5 +477,53 @@ export default class Play extends Phaser.Scene {
     createFallbackBackground() {
         // No longer used - redirect to minimal background
         this.createMinimalBackground();
+    }
+
+    createFullscreenButton() {
+        // Use a DOM Element for best style flexibility
+        const btn = document.createElement('button');
+        btn.innerHTML = `<svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="2" width="6" height="2" rx="1" fill="#0ff"/><rect x="2" y="2" width="2" height="6" rx="1" fill="#0ff"/><rect x="14" y="2" width="6" height="2" rx="1" fill="#0ff"/><rect x="18" y="2" width="2" height="6" rx="1" fill="#0ff"/><rect x="2" y="18" width="6" height="2" rx="1" fill="#0ff"/><rect x="2" y="14" width="2" height="6" rx="1" fill="#0ff"/><rect x="14" y="18" width="6" height="2" rx="1" fill="#0ff"/><rect x="18" y="14" width="2" height="6" rx="1" fill="#0ff"/></svg>`;
+        btn.title = 'Toggle Fullscreen';
+        btn.style.cssText = `
+            background: rgba(30,40,50,0.85);
+            border: 2px solid #0ff;
+            border-radius: 50%;
+            width: 48px; height: 48px;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 2px 12px #0008;
+            cursor: pointer;
+            position: absolute;
+            top: 24px; right: 32px;
+            z-index: 100;
+            transition: background 0.2s, border 0.2s;
+        `;
+        btn.onmouseenter = () => btn.style.background = 'rgba(0,255,255,0.18)';
+        btn.onmouseleave = () => btn.style.background = 'rgba(30,40,50,0.85)';
+        btn.onfocus = () => btn.onmouseenter?.(undefined as any);
+        btn.onblur = () => btn.onmouseleave?.(undefined as any);
+        btn.tabIndex = 0;
+
+        btn.onclick = async () => {
+            const canvas = this.sys.game.canvas;
+            if (!document.fullscreenElement) {
+                await canvas.requestFullscreen();
+                btn.style.border = '2px solid #fff';
+            } else {
+                await document.exitFullscreen();
+                btn.style.border = '2px solid #0ff';
+            }
+        };
+
+        this.fullscreenBtn = this.add.dom(this.scale.width - 40, 40, btn).setOrigin(1, 0).setDepth(100);
+        this.scale.on('resize', () => {
+            this.fullscreenBtn.setPosition(this.scale.width - 40, 40);
+        });
+        document.addEventListener('fullscreenchange', () => {
+            if (!document.fullscreenElement) {
+                btn.style.border = '2px solid #0ff';
+            } else {
+                btn.style.border = '2px solid #fff';
+            }
+        });
     }
 } 

@@ -6,6 +6,7 @@ interface MonsterConfig {
     type: MonsterType;
     frameCount: number;
     deathFrameCount: number;
+    hitFrameCount: number;
     scale: number;
     xOffset: number;
     yOffset: number;
@@ -14,10 +15,13 @@ interface MonsterConfig {
 export class Monster extends Phaser.GameObjects.Sprite {
     private monsterType: MonsterType;
     private isDying: boolean = false;
+    private isHit: boolean = false;
+    private runAnimKey: string;
 
     constructor(scene: Phaser.Scene, x: number, y: number, type: MonsterType) {
         super(scene, x, y, `monster_${type}_run`, 0);
         this.monsterType = type;
+        this.runAnimKey = `monster-${type}-run`;
 
         const config = this.getFrameConfig(type);
 
@@ -32,10 +36,9 @@ export class Monster extends Phaser.GameObjects.Sprite {
         this.y += config.yOffset;
 
         // Create run animation if it doesn't exist
-        const runAnimKey = `monster-${type}-run`;
-        if (!scene.anims.exists(runAnimKey)) {
+        if (!scene.anims.exists(this.runAnimKey)) {
             scene.anims.create({
-                key: runAnimKey,
+                key: this.runAnimKey,
                 frames: scene.anims.generateFrameNumbers(`monster_${type}_run`, {
                     start: 0,
                     end: config.frameCount - 1
@@ -59,8 +62,22 @@ export class Monster extends Phaser.GameObjects.Sprite {
             });
         }
 
+        // Create hit animation if it doesn't exist
+        const hitAnimKey = `monster-${type}-hit`;
+        if (!scene.anims.exists(hitAnimKey)) {
+            scene.anims.create({
+                key: hitAnimKey,
+                frames: scene.anims.generateFrameNumbers(`monster_${type}_hit`, {
+                    start: 0,
+                    end: config.hitFrameCount - 1
+                }),
+                frameRate: 10,
+                repeat: 0
+            });
+        }
+
         // Play run animation by default
-        this.play(runAnimKey);
+        this.play(this.runAnimKey);
     }
 
     playDeathAnimation(): Promise<void> {
@@ -83,18 +100,44 @@ export class Monster extends Phaser.GameObjects.Sprite {
         });
     }
 
+    playHitAnimation(): Promise<void> {
+        if (this.isDying || this.isHit) return Promise.resolve();
+
+        this.isHit = true;
+        const hitAnimKey = `monster-${this.monsterType}-hit`;
+
+        return new Promise((resolve) => {
+            // Switch to hit spritesheet
+            this.setTexture(`monster_${this.monsterType}_hit`);
+
+            // Play hit animation
+            this.play(hitAnimKey);
+
+            // Listen for animation complete
+            this.once('animationcomplete', () => {
+                // Return to run animation if not dying
+                if (!this.isDying) {
+                    this.setTexture(`monster_${this.monsterType}_run`);
+                    this.play(this.runAnimKey);
+                }
+                this.isHit = false;
+                resolve();
+            });
+        });
+    }
+
     private getFrameConfig(type: MonsterType): MonsterConfig {
         switch (type) {
             case 'Skeleton':
-                return { type, frameCount: 4, deathFrameCount: 4, scale: 1.6, xOffset: 0, yOffset: 0 };
+                return { type, frameCount: 4, deathFrameCount: 4, hitFrameCount: 4, scale: 1.6, xOffset: 0, yOffset: 0 };
             case 'Flying eye':
-                return { type, frameCount: 8, deathFrameCount: 4, scale: 2, xOffset: 0, yOffset: -20 };
+                return { type, frameCount: 8, deathFrameCount: 4, hitFrameCount: 4, scale: 2, xOffset: 0, yOffset: -20 };
             case 'Mushroom':
-                return { type, frameCount: 8, deathFrameCount: 4, scale: 2, xOffset: 0, yOffset: -12 };
+                return { type, frameCount: 8, deathFrameCount: 4, hitFrameCount: 4, scale: 2, xOffset: 0, yOffset: -12 };
             case 'Goblin':
-                return { type, frameCount: 8, deathFrameCount: 4, scale: 2, xOffset: 0, yOffset: -15 };
+                return { type, frameCount: 8, deathFrameCount: 4, hitFrameCount: 4, scale: 2, xOffset: 0, yOffset: -15 };
             default:
-                return { type, frameCount: 4, deathFrameCount: 4, scale: 2, xOffset: 0, yOffset: 0 };
+                return { type, frameCount: 4, deathFrameCount: 4, hitFrameCount: 4, scale: 2, xOffset: 0, yOffset: 0 };
         }
     }
 

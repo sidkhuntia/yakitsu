@@ -36,6 +36,8 @@ export default class Play extends Phaser.Scene {
     private obstacleFrozen = false;
     private inputLocked = false;
     private obstacleSpeed = 2;
+    private baseObstacleSpeed = 2;
+    private difficultyLevel = 1;
     private settingsModalOpen = false;
     private backgroundLayers: Phaser.GameObjects.TileSprite[] = [];
     private groundLayers: Phaser.GameObjects.TileSprite[] = [];
@@ -44,6 +46,7 @@ export default class Play extends Phaser.Scene {
     private fullscreenChangeHandler?: () => void;
     private resizeHandler?: () => void;
     private speedMultiplier = 1.1;
+    private escKeyHandler: (event: KeyboardEvent) => void = () => this.handleEscKey();
 
     constructor() {
         super('Play');
@@ -85,6 +88,13 @@ export default class Play extends Phaser.Scene {
                 `assets/monsters/${type}/Death.png`,
                 { frameWidth: 150, frameHeight: 150 }
             );
+
+            // Hit animation
+            this.load.spritesheet(
+                `monster_${type}_hit`,
+                `assets/monsters/${type}/Take Hit.png`,
+                { frameWidth: 150, frameHeight: 150 }
+            );
         });
 
         // Add load error handler
@@ -99,6 +109,8 @@ export default class Play extends Phaser.Scene {
         this.lives = 3;
         this.gameOverTriggered = false;
         this.wordsCompleted = 0;
+        this.obstacleSpeed = this.baseObstacleSpeed;
+        this.difficultyLevel = 1;
         this.easyWords = this.cache.json.get('easyWords') || [];
         this.mediumWords = this.cache.json.get('mediumWords') || [];
         this.hardWords = this.cache.json.get('hardWords') || [];
@@ -129,6 +141,10 @@ export default class Play extends Phaser.Scene {
             this.updateWordDisplay();
             if (ok) {
                 this.flashCaret('#0f0');
+                // Play hit animation on correct key press
+                if (this.monster) {
+                    this.monster.playHitAnimation();
+                }
                 if (this.engine.isComplete()) {
                     if (this.powerUpType) {
                         this.handlePowerUp();
@@ -152,16 +168,8 @@ export default class Play extends Phaser.Scene {
             }
         });
 
-        this.input.keyboard!.on('keydown-ESC', () => {
-            if (this.settingsModalOpen) return;
-            this.settingsModalOpen = true;
-            this.input.keyboard!.enabled = false;
-            const modal = new SettingsModal(this, () => {
-                this.settingsModalOpen = false;
-                this.input.keyboard!.enabled = true;
-            });
-            this.children.add(modal);
-        });
+        // Set up the ESC key handler
+        this.input.keyboard!.on('keydown-ESC', this.escKeyHandler);
 
         this.scale.on('resize', this.handleResize, this);
         this.createFullscreenButton();
@@ -214,6 +222,11 @@ export default class Play extends Phaser.Scene {
         this.updateHUD();
         this.spawnPowerUp();
 
+        // Increase difficulty every 5 words
+        if (this.wordsCompleted % 5 === 0) {
+            this.increaseDifficulty();
+        }
+
         // Spawn new monster
         this.spawnNewMonster();
 
@@ -248,6 +261,7 @@ export default class Play extends Phaser.Scene {
         this.scoreText.setVisible(false);
         this.comboText.setVisible(false);
         this.livesText.setVisible(false);
+        this.avatar.setVisible(false);
         // Show modal overlay
         const bestScore = (typeof loadData === 'function') ? loadData().bestScore : 0;
         const modal = new GameOverModal(this, this.score, bestScore,
@@ -278,7 +292,7 @@ export default class Play extends Phaser.Scene {
             this.anims.create({
                 key: 'avatar-run',
                 frames: this.anims.generateFrameNumbers('avatar_run', { start: 0, end: 7 }),
-                frameRate: 12,
+                frameRate: 8,
                 repeat: -1
             })
         }
@@ -568,6 +582,9 @@ export default class Play extends Phaser.Scene {
             document.removeEventListener('fullscreenchange', this.fullscreenChangeHandler);
             this.fullscreenChangeHandler = undefined;
         }
+
+        // Remove the ESC key handler
+        this.input.keyboard?.off('keydown-ESC', this.escKeyHandler);
     }
 
     // Add a new method to spawn a monster with optional death animation
@@ -601,5 +618,63 @@ export default class Play extends Phaser.Scene {
             this.powerUpSprite.setY(this.monster.y - 40);
             this.powerUpSprite.setVisible(this.powerUpType !== null);
         }
+    }
+
+    // Add a new method to increase difficulty
+    increaseDifficulty() {
+        this.difficultyLevel++;
+
+        // Cap the max speed increase at 100% faster than base speed
+        const maxSpeedMultiplier = 2.0;
+        const speedIncrease = Math.min(0.1 * this.difficultyLevel, maxSpeedMultiplier);
+
+        this.baseObstacleSpeed = this.baseObstacleSpeed * (1 + speedIncrease * 0.1);
+        this.obstacleSpeed = this.baseObstacleSpeed;
+    }
+
+    // Add a new method to pause/resume game animations
+    pauseGameAnimations(pause: boolean) {
+        // Pause/resume monster animations
+        if (this.monster) {
+            if (pause) {
+                this.monster.anims.pause();
+            } else {
+                this.monster.anims.resume();
+            }
+        }
+
+        // Pause/resume avatar animations
+        if (this.avatar) {
+            if (pause) {
+                this.avatar.anims.pause();
+            } else {
+                this.avatar.anims.resume();
+            }
+        }
+
+        // Pause/resume background movement by setting a flag
+        this.obstacleFrozen = pause;
+    }
+
+    handleEscKey() {
+        if (this.settingsModalOpen) return;
+
+        this.settingsModalOpen = true;
+        this.input.keyboard!.enabled = false;
+
+        // Pause animations and game physics
+        this.pauseGameAnimations(true);
+
+        const modal = new SettingsModal(this, () => {
+            this.settingsModalOpen = false;
+            this.input.keyboard!.enabled = true;
+
+            // Resume animations and game physics
+            this.pauseGameAnimations(false);
+        });
+        this.children.add(modal);
+
+        // Set higher depth to ensure modal appears above all game elements
+        modal.setDepth(100);
     }
 } 

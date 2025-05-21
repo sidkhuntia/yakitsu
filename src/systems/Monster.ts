@@ -129,7 +129,7 @@ export class Monster extends Phaser.GameObjects.Sprite {
         });
     }
 
-    private static getFrameConfig(type: MonsterType): MonsterConfig {
+    public static getFrameConfig(type: MonsterType): MonsterConfig {
         switch (type) {
             case 'Skeleton':
                 return { type, frameCount: 4, deathFrameCount: 4, hitFrameCount: 4, scale: 1.6, xOffset: 0, yOffset: 0 };

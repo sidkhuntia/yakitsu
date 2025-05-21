@@ -12,7 +12,13 @@ const config: Phaser.Types.Core.GameConfig = {
   pixelArt: true,
   scene: [Boot, Menu, Play, GameOver],
   parent: 'app',
-
+  physics: {
+    default: 'arcade',
+    arcade: {
+      gravity: { x: 0, y: 0 },
+      debug: false
+    }
+  },
 };
 
 new Phaser.Game(config);

@@ -47,6 +47,9 @@ export default class Play extends Phaser.Scene {
     private resizeHandler?: () => void;
     private speedMultiplier = 1.1;
     private escKeyHandler: (event: KeyboardEvent) => void = () => this.handleEscKey();
+    private avatarBody!: Phaser.Physics.Arcade.Sprite;
+    private monsterBody!: Phaser.Physics.Arcade.Sprite;
+    private collisionDebug: boolean = false;
 
     constructor() {
         super('Play');
@@ -132,6 +135,30 @@ export default class Play extends Phaser.Scene {
         this.createHUD();
         this.updateWordDisplay();
         this.updateHUD();
+
+        // Enable physics
+        this.physics.world.enable([this.avatar, this.monster]);
+
+        // Set up avatar and monster physics bodies
+        this.avatarBody = this.avatar as unknown as Phaser.Physics.Arcade.Sprite;
+        this.monsterBody = this.monster as unknown as Phaser.Physics.Arcade.Sprite;
+
+        // Adjust hitbox size for avatar (smaller than the visual sprite)
+        if (this.avatarBody.body) {
+            this.avatarBody.body.setSize(40, 70, true);
+            this.avatarBody.body.setOffset(70, 60);
+        }
+
+        // Since the monster is created later, we'll adjust its hitbox when spawning
+
+        // Toggle collision debug with D key (for development)
+        this.input.keyboard!.on('keydown-X', () => {
+            this.collisionDebug = !this.collisionDebug;
+            this.physics.world.drawDebug = this.collisionDebug;
+            if (!this.collisionDebug) {
+                this.physics.world.debugGraphic.clear();
+            }
+        });
 
         this.input.keyboard!.on('keydown', (event: KeyboardEvent) => {
             if (this.engine.isComplete() || this.gameOverTriggered || this.inputLocked) return;
@@ -251,7 +278,7 @@ export default class Play extends Phaser.Scene {
         }
     }
 
-    triggerGameOver() {
+     triggerGameOver() {
         this.gameOverTriggered = true;
         // Hide all main game text objects to prevent overlap with modal
         this.typedText.setVisible(false);
@@ -359,6 +386,12 @@ export default class Play extends Phaser.Scene {
             if (!this.obstacleFrozen) {
                 this.monster.x -= this.obstacleSpeed * 2; // Move monster towards the player
 
+                // Update the physics body position to match the sprite
+                if (this.monsterBody && this.monsterBody.body) {
+                    this.monsterBody.x = this.monster.x;
+                    this.monsterBody.y = this.monster.y;
+                }
+
                 // Reset monster position when it moves off-screen to the left
                 if (this.monster.x < -100) {
                     // Spawn new monster without death animation (it's off-screen)
@@ -371,12 +404,28 @@ export default class Play extends Phaser.Scene {
                 }
             }
 
-            // Check collision
-            const avatarBounds = this.avatar.getBounds();
-            const monsterBounds = this.monster.getBounds();
-            if (Phaser.Geom.Intersects.RectangleToRectangle(avatarBounds, monsterBounds)) {
-                this.loseLife();
+            // Check collision using physics instead of rectangle bounds
+            if (this.avatarBody && this.monsterBody) {
+                this.physics.overlap(
+                    this.avatarBody,
+                    this.monsterBody,
+                    this.handleCollision.bind(this), // Use bind to fix 'this' context
+                    undefined, // Use undefined instead of null
+                    this
+                );
             }
+        }
+    }
+
+    // New method to handle collision
+    handleCollision() {
+        if (this.gameOverTriggered || this.obstacleFrozen) return;
+
+        this.loseLife();
+
+        if (this.gameOverTriggered) {
+            this.monster.setVisible(false);
+            this.monster.setActive(false);
         }
     }
 
@@ -511,7 +560,7 @@ export default class Play extends Phaser.Scene {
         ground.fillStyle(0x228B22, 0.5); // Semi-transparent green
         ground.fillRect(0, 600, 1280, 120);
     }
-    
+
     // FIX: fullscreen button is not working, its not visible
     createFullscreenButton() {
         // Use a DOM Element for best style flexibility
@@ -586,9 +635,12 @@ export default class Play extends Phaser.Scene {
         this.input.keyboard?.off('keydown-ESC', this.escKeyHandler);
     }
 
-    // Add a new method to spawn a monster with optional death animation
+
+    // Modify the spawnNewMonster method to update physics body
     async spawnNewMonster(playDeathAnimation = true) {
+        console.log('spawnNewMonster');
         if (this.monster) {
+            console.log('monster exists');
             if (playDeathAnimation) {
                 // Disable collision detection during death animation
                 this.obstacleFrozen = true;
@@ -608,8 +660,25 @@ export default class Play extends Phaser.Scene {
         const monsterType = Monster.getRandomType();
 
         // Create monster at the right side of the screen
-        this.monster = new Monster(this, this.scale.width + 10, height - 80, monsterType);
+        this.monster = new Monster(this, this.scale.width + 100, height - 80, monsterType);
         this.add.existing(this.monster);
+
+        // Enable physics on the new monster
+        this.physics.world.enable(this.monster);
+        this.monsterBody = this.monster as unknown as Phaser.Physics.Arcade.Sprite;
+
+        // Adjust hitbox size for monster based on type
+        if (this.monsterBody.body) {
+            // Make the hitbox smaller than the visual sprite for more accurate collision
+            this.monsterBody.body.setSize(50, 80, true);
+
+            // Different monster types have different offsets
+            const config = Monster.getFrameConfig(monsterType);
+            // Adjust collision box position
+            const offsetX = 50; // General offset
+            const offsetY = 50; // General offset
+            this.monsterBody.body.setOffset(offsetX, offsetY);
+        }
 
         // Update power-up position if needed
         if (this.powerUpSprite) {

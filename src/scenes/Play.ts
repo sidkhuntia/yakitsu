@@ -39,7 +39,7 @@ export default class Play extends Phaser.Scene {
 	private livesText!: Phaser.GameObjects.Text
 	private gameOverTriggered = false
 	private easyWords: string[] = []
-	private mediumWords: string[] = []
+	private mediumWords: string[] = [];
 	private hardWords: string[] = []
 	private bigWords: string[] = []
 	private largeWords: string[] = []

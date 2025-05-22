@@ -40,7 +40,7 @@ export default class Play extends Phaser.Scene {
 	private gameOverTriggered = false
 	private easyWords: string[] = []
 	private mediumWords: string[] = [];
-	private hardWords: string[] = []
+	private hardWords: string[] = [];
 	private bigWords: string[] = []
 	private largeWords: string[] = []
 	private wordsCompleted = 0

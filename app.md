@@ -1,11 +1,11 @@
+# Yatiksu – Complete Engineering Blueprint
 
-
-# Yatiksu – Complete Engineering Blueprint  
-*A desktop-first, offline 8-bit typing runner (Phaser 4 + TypeScript)*
+_A desktop-first, offline 8-bit typing runner (Phaser 4 + TypeScript)_
 
 ---
 
 ## 0. Executive Summary
+
 Yatiksu is a Flappy-Bird-style endless runner where progress is gated by correctly typing words before the avatar collides with obstacles.  
 Scope v1 targets **desktop keyboards**, **100 % offline play**, and uses only CC-0 / MIT-compatible assets. All data (scores, settings) lives in `localStorage`; no server is required.
 
@@ -13,17 +13,17 @@ Scope v1 targets **desktop keyboards**, **100 % offline play**, and uses only CC
 
 ## 1. Tech Stack
 
-| Layer                 | Selection                                         | Rationale                                                |
-|-----------------------|---------------------------------------------------|----------------------------------------------------------|
-| **Engine**           | **Phaser 4** (TypeScript)                         | Lightweight, pixel-perfect, familiar API                 |
-| **Bundler/Dev**      | **Vite + ESBuild**                                | Instant HMR, zero-config TS                              |
-| **State Mgmt**       | **Zustand**                                       | Minimal boilerplate                                      |
-| **Persistence**      | **localStorage** (JSON string)                    | Tiny footprint, sufficient for highscores/settings       |
-| **Offline**          | `vite-plugin-pwa` → Workbox service worker        | Installable PWA & cache-first assets                     |
-| **Lint/Format**      | ESLint × Prettier × Husky (pre-commit)            | Consistent codebase                                      |
-| **CI**               | GitHub Actions (lint → build → Cypress smoke)     | Auto-verify PRs                                          |
-| **Hosting (optional)** | Vercel / Netlify (static deploy)               | CDN + HTTPS with zero backend                            |
-| **Asset Tools**      | Aseprite (sprites) · Kenney CC-0 placeholder art · Bfxr (SFX) · BeepBox.cc (music) | Zero licensing headaches |
+| Layer                  | Selection                                                                          | Rationale                                          |
+| ---------------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------- |
+| **Engine**             | **Phaser 4** (TypeScript)                                                          | Lightweight, pixel-perfect, familiar API           |
+| **Bundler/Dev**        | **Vite + ESBuild**                                                                 | Instant HMR, zero-config TS                        |
+| **State Mgmt**         | **Zustand**                                                                        | Minimal boilerplate                                |
+| **Persistence**        | **localStorage** (JSON string)                                                     | Tiny footprint, sufficient for highscores/settings |
+| **Offline**            | `vite-plugin-pwa` → Workbox service worker                                         | Installable PWA & cache-first assets               |
+| **Lint/Format**        | ESLint × Prettier × Husky (pre-commit)                                             | Consistent codebase                                |
+| **CI**                 | GitHub Actions (lint → build → Cypress smoke)                                      | Auto-verify PRs                                    |
+| **Hosting (optional)** | Vercel / Netlify (static deploy)                                                   | CDN + HTTPS with zero backend                      |
+| **Asset Tools**        | Aseprite (sprites) · Kenney CC-0 placeholder art · Bfxr (SFX) · BeepBox.cc (music) | Zero licensing headaches                           |
 
 ---
 
@@ -50,30 +50,30 @@ yatiksu/
 ├─ README.md               # Player & dev guide
 └─ tsconfig.json
 
-````
+```
 
 ---
 
 ## 3. Core Gameplay Mechanics
 
-| Feature            | Implementation Detail                                                                                     |
-|--------------------|------------------------------------------------------------------------------------------------------------|
-| **Lives**          | 3 starting hearts ➝ +1 life every 40-word flawless streak (cap 5).                                         |
-| **Speed**          | `base = 120 px/s` ➝ `+8 px/s` after every 10 correctly typed words.                                        |
-| **Obstacle Gap**   | Distance = `word.length × 45 px + 120 px` (≈2–4 s to finish any word, whatever speed tier).                |
-| **Scoring**        | `10 × word.length × (1 + floor(streak/20)*0.25)`; streak resets on any miss.                              |
-| **Power-ups**      | 5 % spawn rate: **ICE** (freeze scroll 1 s) or **BOMB** (clear next obstacle).                            |
-| **Word Tiers**     | Three JSON lists (easy 3-5 chars, medium 5-7, hard 8-12). Tier picked by “level” (every 10 words).         |
+| Feature          | Implementation Detail                                                                              |
+| ---------------- | -------------------------------------------------------------------------------------------------- |
+| **Lives**        | 3 starting hearts ➝ +1 life every 40-word flawless streak (cap 5).                                 |
+| **Speed**        | `base = 120 px/s` ➝ `+8 px/s` after every 10 correctly typed words.                                |
+| **Obstacle Gap** | Distance = `word.length × 45 px + 120 px` (≈2–4 s to finish any word, whatever speed tier).        |
+| **Scoring**      | `10 × word.length × (1 + floor(streak/20)*0.25)`; streak resets on any miss.                       |
+| **Power-ups**    | 5 % spawn rate: **ICE** (freeze scroll 1 s) or **BOMB** (clear next obstacle).                     |
+| **Word Tiers**   | Three JSON lists (easy 3-5 chars, medium 5-7, hard 8-12). Tier picked by “level” (every 10 words). |
 
 ---
 
 ## 4. Word-Typing System (Play Scene)
 
-1. Load current word string → display above obstacle.  
-2. Listen to `keydown`.  
-   * **Correct key** → reveal letter & advance caret.  
-   * **Incorrect** → flash red (no penalty unless timer expires).  
-3. On word complete → award score, increment streak, spawn next obstacle with updated speed.  
+1. Load current word string → display above obstacle.
+2. Listen to `keydown`.
+    - **Correct key** → reveal letter & advance caret.
+    - **Incorrect** → flash red (no penalty unless timer expires).
+3. On word complete → award score, increment streak, spawn next obstacle with updated speed.
 4. On avatar-obstacle collision → `lives--`; if `lives === 0` show GameOver.
 
 ---
@@ -91,22 +91,23 @@ flowchart TD
   G -->|Lives > 0| E
   G -->|Lives == 0| H[GameOver] -->|Retry| B
   H -->|Back to Menu| A
-````
+```
 
 ---
 
 ## 6. UI / UX Specification
 
-* **Canvas**: 960 × 540, CSS-scaled with `image-rendering: pixelated` for crisp edges.
-* **HUD**:
+- **Canvas**: 960 × 540, CSS-scaled with `image-rendering: pixelated` for crisp edges.
+- **HUD**:
 
-  * Hearts (👾 sprites) top-left.
-  * Score & combo top-right.
-* **Settings modal** (ESC):
+    - Hearts (👾 sprites) top-left.
+    - Score & combo top-right.
 
-  * Toggle music/SFX.
-  * Dyslexic-friendly bitmap font.
-  * Clear highscores (reset localStorage).
+- **Settings modal** (ESC):
+
+    - Toggle music/SFX.
+    - Dyslexic-friendly bitmap font.
+    - Clear highscores (reset localStorage).
 
 ---
 
@@ -163,27 +164,27 @@ pnpm preview                 # serve /dist locally
 | **SFX**          | Bfxr presets (“coin”, “hit”, “power-up”) exported WAV → Ogg |
 | **Music**        | 60-s NES-style loop @ 120 BPM via BeepBox                   |
 
-*(All created or remixed under CC-0 or MIT).*
+_(All created or remixed under CC-0 or MIT)._
 
 ---
 
 ## 11. Stretch Goals (Post-v1)
 
-* **Daily Challenge** – seeded word list rotates at UTC 00:00.
-* **Ghost Replay** – store key timestamps and allow self-race.
-* **Electron Wrapper** – cross-platform desktop app.
-* **Multiplayer Race** – WebSocket lobby; first to N words wins (server can be Supabase Edge Functions).
+- **Daily Challenge** – seeded word list rotates at UTC 00:00.
+- **Ghost Replay** – store key timestamps and allow self-race.
+- **Electron Wrapper** – cross-platform desktop app.
+- **Multiplayer Race** – WebSocket lobby; first to N words wins (server can be Supabase Edge Functions).
 
 ---
 
 ## 12. MIT License Notice
 
 ```
-© 2025 Siddhartha Khuntia  
-Released under the MIT License.  
+© 2025 Siddhartha Khuntia
+Released under the MIT License.
 ```
 
-*(Full MIT text lives in `/LICENSE`; all original art & code inherits the same license).*
+_(Full MIT text lives in `/LICENSE`; all original art & code inherits the same license)._
 
 ---
 
@@ -192,4 +193,5 @@ Released under the MIT License.
 Copy this document into your repo’s `docs/` folder (or paste directly into ChatGPT, GitHub Copilot, etc.) to give any LLM full project context while coding.
 
 ```
+
 ```

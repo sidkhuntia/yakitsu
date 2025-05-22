@@ -9,4 +9,4 @@ pnpm install
 pnpm dev
 ```
 
-For full specs and engineering blueprint, see `app.md`. 
+For full specs and engineering blueprint, see `app.md`.

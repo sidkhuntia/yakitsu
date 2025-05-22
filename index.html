@@ -1,355 +1,358 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=960, initial-scale=1.0" />
-    <title>Yakitsku</title>
-    <link rel="icon" href="/favicon.png" type="image/png" />
-    <meta
-      name="description"
-      content="A fun and engaging typing game to help your avatar dodge obstacles and achieve high scores."
-    />
-    <meta
-      name="keywords"
-      content="typing game, avatar, obstacles, high score, fun, interactive"
-    />
-    <meta name="author" content="Siddhartha Khuntia" />
-    <meta property="og:title" content="Yakitsku - Typing Game" />
-    <meta
-      property="og:description"
-      content="Help your avatar dodge obstacles by typing words quickly."
-    />
-    <meta property="og:image" content="/yakitsku.png" />
-    <meta property="og:url" content="https://yakitsku.sidkhuntia.in" />
-    <meta name="twitter:card" content="" />
-    <meta name="twitter:title" content="Yakitsku - Typing Game" />
-    <meta
-      name="twitter:description"
-      content="Help your avatar dodge obstacles by typing words quickly."
-    />
-    <meta name="twitter:image" content="/yakisku.png" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Jersey+10&display=swap"
-      rel="stylesheet"
-    />
-  </head>
-  <!-- Google tag (gtag.js) -->
-  <script
-    async
-    src="https://www.googletagmanager.com/gtag/js?id=G-DJD5YDN0Q0"
-  ></script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag() {
-      dataLayer.push(arguments);
-    }
-    gtag("js", new Date());
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=960, initial-scale=1.0" />
+		<title>Yakitsku</title>
+		<link rel="icon" href="/favicon.png" type="image/png" />
+		<meta
+			name="description"
+			content="A fun and engaging typing game to help your avatar dodge obstacles and achieve high scores." />
+		<meta
+			name="keywords"
+			content="typing game, avatar, obstacles, high score, fun, interactive" />
+		<meta name="author" content="Siddhartha Khuntia" />
+		<meta property="og:title" content="Yakitsku - Typing Game" />
+		<meta
+			property="og:description"
+			content="Help your avatar dodge obstacles by typing words quickly." />
+		<meta property="og:image" content="/yakitsku.png" />
+		<meta property="og:url" content="https://yakitsku.sidkhuntia.in" />
+		<meta name="twitter:card" content="" />
+		<meta name="twitter:title" content="Yakitsku - Typing Game" />
+		<meta
+			name="twitter:description"
+			content="Help your avatar dodge obstacles by typing words quickly." />
+		<meta name="twitter:image" content="/yakisku.png" />
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link
+			href="https://fonts.googleapis.com/css2?family=Jersey+10&display=swap"
+			rel="stylesheet" />
+	</head>
+	<!-- Google tag (gtag.js) -->
+	<script
+		async
+		src="https://www.googletagmanager.com/gtag/js?id=G-DJD5YDN0Q0"></script>
+	<script>
+		window.dataLayer = window.dataLayer || []
+		function gtag() {
+			dataLayer.push(arguments)
+		}
+		gtag('js', new Date())
 
-    gtag("config", "G-DJD5YDN0Q0");
-  </script>
-  <body style="background: #222; margin: 0">
-    <style>
-      @font-face {
-        font-family: "Retro Font";
-        src: url("/assets/fonts/gaming_font.woff2") format("truetype");
-        font-weight: normal;
-        font-style: normal;
-      }
-    </style>
-    <div
-      style="
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        min-height: 100vh;
-        justify-content: center;
-        background: #222;
-      "
-    >
-      <button
-        id="fullscreen-btn"
-        style="
-          margin-bottom: 1.2rem;
-          font-size: 1.1rem;
-          padding: 0.5em 1.2em;
-          background: #333;
-          color: #0ff;
-          border: 1px solid #0ff;
-          border-radius: 8px;
-          cursor: pointer;
-          box-shadow: 0 2px 12px #0008;
-          transition: background 0.2s, border 0.2s;
-        "
-      >
-        Full Screen
-      </button>
-      <div
-        id="game-container"
-        style="
-          position: relative;
-          padding: 10px;
-          border-radius: 12px;
-          background: linear-gradient(145deg, #1a1a2e, #16213e);
-          box-shadow: 0 0 20px rgba(0, 255, 255, 0.5),
-            0 0 40px rgba(0, 255, 255, 0.2), inset 0 0 10px rgba(0, 0, 0, 0.8);
-          overflow: hidden;
-        "
-      >
-        <!-- Scan lines overlay -->
-        <div
-          class="scan-lines"
-          style="
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: repeating-linear-gradient(
-              0deg,
-              rgba(0, 0, 0, 0.15),
-              rgba(0, 0, 0, 0.15) 1px,
-              transparent 1px,
-              transparent 2px
-            );
-            pointer-events: none;
-            z-index: 10;
-            mix-blend-mode: overlay;
-            opacity: 0.4;
-          "
-        ></div>
+		gtag('config', 'G-DJD5YDN0Q0')
+	</script>
+	<body style="background: #222; margin: 0">
+		<style>
+			@font-face {
+				font-family: 'Retro Font';
+				src: url('/assets/fonts/gaming_font.woff2') format('truetype');
+				font-weight: normal;
+				font-style: normal;
+			}
+		</style>
+		<div
+			style="
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				min-height: 100vh;
+				justify-content: center;
+				background: #222;
+			">
+			<button
+				id="fullscreen-btn"
+				style="
+					margin-bottom: 1.2rem;
+					font-size: 1.1rem;
+					padding: 0.5em 1.2em;
+					background: #333;
+					color: #0ff;
+					border: 1px solid #0ff;
+					border-radius: 8px;
+					cursor: pointer;
+					box-shadow: 0 2px 12px #0008;
+					transition:
+						background 0.2s,
+						border 0.2s;
+				">
+				Full Screen
+			</button>
+			<div
+				id="game-container"
+				style="
+					position: relative;
+					padding: 10px;
+					border-radius: 12px;
+					background: linear-gradient(145deg, #1a1a2e, #16213e);
+					box-shadow:
+						0 0 20px rgba(0, 255, 255, 0.5),
+						0 0 40px rgba(0, 255, 255, 0.2),
+						inset 0 0 10px rgba(0, 0, 0, 0.8);
+					overflow: hidden;
+				">
+				<!-- Scan lines overlay -->
+				<div
+					class="scan-lines"
+					style="
+						position: absolute;
+						top: 0;
+						left: 0;
+						right: 0;
+						bottom: 0;
+						background: repeating-linear-gradient(
+							0deg,
+							rgba(0, 0, 0, 0.15),
+							rgba(0, 0, 0, 0.15) 1px,
+							transparent 1px,
+							transparent 2px
+						);
+						pointer-events: none;
+						z-index: 10;
+						mix-blend-mode: overlay;
+						opacity: 0.4;
+					"></div>
 
-        <!-- CRT flicker effect -->
-        <div
-          class="crt-flicker"
-          style="
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            pointer-events: none;
-            z-index: 11;
-            mix-blend-mode: soft-light;
-            opacity: 0.3;
-          "
-        ></div>
+				<!-- CRT flicker effect -->
+				<div
+					class="crt-flicker"
+					style="
+						position: absolute;
+						top: 0;
+						left: 0;
+						right: 0;
+						bottom: 0;
+						pointer-events: none;
+						z-index: 11;
+						mix-blend-mode: soft-light;
+						opacity: 0.3;
+					"></div>
 
-        <div
-          class="corner top-left"
-          style="
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 40px;
-            height: 40px;
-            border-top: 4px solid #0ff;
-            border-left: 4px solid #0ff;
-            border-top-left-radius: 8px;
-          "
-        ></div>
-        <div
-          class="corner top-right"
-          style="
-            position: absolute;
-            top: 0;
-            right: 0;
-            width: 40px;
-            height: 40px;
-            border-top: 4px solid #0ff;
-            border-right: 4px solid #0ff;
-            border-top-right-radius: 8px;
-          "
-        ></div>
-        <div
-          class="corner bottom-left"
-          style="
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 40px;
-            height: 40px;
-            border-bottom: 4px solid #0ff;
-            border-left: 4px solid #0ff;
-            border-bottom-left-radius: 8px;
-          "
-        ></div>
-        <div
-          class="corner bottom-right"
-          style="
-            position: absolute;
-            bottom: 0;
-            right: 0;
-            width: 40px;
-            height: 40px;
-            border-bottom: 4px solid #0ff;
-            border-right: 4px solid #0ff;
-            border-bottom-right-radius: 8px;
-          "
-        ></div>
-        <div id="app" width="1280" height="720"></div>
-      </div>
-      <div
-        id="game-info"
-        style="
-          max-width: 600px;
-          color: #fff;
-          margin-top: 2.2rem;
-          text-align: center;
-          font-size: 1.13rem;
-          font-family: 'Inter', 'Avenir', 'Segoe UI', Arial, sans-serif;
-          background: rgba(30, 30, 40, 0.55);
-          border-radius: 18px;
-          padding: 1.6rem 2.2rem 1.6rem 2.2rem;
-          box-shadow: 0 4px 32px #000a, 0 0 0 2px #0ff4;
-          backdrop-filter: blur(8px) saturate(1.2);
-          border: 2.5px solid transparent;
-          background-clip: padding-box, border-box;
-          border-image: linear-gradient(120deg, #0ff, #a0f, #0ff 90%) 1;
-          animation: borderGlow 3s linear infinite;
-          position: relative;
-        "
-      >
-        <b
-          style="
-            font-size: 1.25em;
-            letter-spacing: 0.04em;
-            color: #0ff;
-            text-shadow: 0 2px 8px #0ff4;
-          "
-          >Yakitsku</b
-        >
-        <div style="margin-top: 0.5em">
-          Type words to help your avatar kill monsters!
-        </div>
-        <ul
-          style="
-            text-align: left;
-            margin: 1.1em 0 0 1.2em;
-            padding: 0;
-            font-size: 1em;
-            line-height: 1.7;
-            color: #eaf6fa;
-            font-family: inherit;
-          "
-        >
-          <li>
-            Type the word above the obstacle before your monster kills you.
-          </li>
-          <li>Each correct word increases your score and speed.</li>
-          <li>3 lives. Lose one if you hit an obstacle. Game over at 0.</li>
-          <!-- <li>
+				<div
+					class="corner top-left"
+					style="
+						position: absolute;
+						top: 0;
+						left: 0;
+						width: 40px;
+						height: 40px;
+						border-top: 4px solid #0ff;
+						border-left: 4px solid #0ff;
+						border-top-left-radius: 8px;
+					"></div>
+				<div
+					class="corner top-right"
+					style="
+						position: absolute;
+						top: 0;
+						right: 0;
+						width: 40px;
+						height: 40px;
+						border-top: 4px solid #0ff;
+						border-right: 4px solid #0ff;
+						border-top-right-radius: 8px;
+					"></div>
+				<div
+					class="corner bottom-left"
+					style="
+						position: absolute;
+						bottom: 0;
+						left: 0;
+						width: 40px;
+						height: 40px;
+						border-bottom: 4px solid #0ff;
+						border-left: 4px solid #0ff;
+						border-bottom-left-radius: 8px;
+					"></div>
+				<div
+					class="corner bottom-right"
+					style="
+						position: absolute;
+						bottom: 0;
+						right: 0;
+						width: 40px;
+						height: 40px;
+						border-bottom: 4px solid #0ff;
+						border-right: 4px solid #0ff;
+						border-bottom-right-radius: 8px;
+					"></div>
+				<div id="app" width="1280" height="720"></div>
+			</div>
+			<div
+				id="game-info"
+				style="
+					max-width: 600px;
+					color: #fff;
+					margin-top: 2.2rem;
+					text-align: center;
+					font-size: 1.13rem;
+					font-family:
+						'Inter', 'Avenir', 'Segoe UI', Arial, sans-serif;
+					background: rgba(30, 30, 40, 0.55);
+					border-radius: 18px;
+					padding: 1.6rem 2.2rem 1.6rem 2.2rem;
+					box-shadow:
+						0 4px 32px #000a,
+						0 0 0 2px #0ff4;
+					backdrop-filter: blur(8px) saturate(1.2);
+					border: 2.5px solid transparent;
+					background-clip: padding-box, border-box;
+					border-image: linear-gradient(120deg, #0ff, #a0f, #0ff 90%)
+						1;
+					animation: borderGlow 3s linear infinite;
+					position: relative;
+				">
+				<b
+					style="
+						font-size: 1.25em;
+						letter-spacing: 0.04em;
+						color: #0ff;
+						text-shadow: 0 2px 8px #0ff4;
+					"
+					>Yakitsku</b
+				>
+				<div style="margin-top: 0.5em">
+					Type words to help your avatar kill monsters!
+				</div>
+				<ul
+					style="
+						text-align: left;
+						margin: 1.1em 0 0 1.2em;
+						padding: 0;
+						font-size: 1em;
+						line-height: 1.7;
+						color: #eaf6fa;
+						font-family: inherit;
+					">
+					<li>
+						Type the word above the obstacle before your monster
+						kills you.
+					</li>
+					<li>Each correct word increases your score and speed.</li>
+					<li>
+						3 lives. Lose one if you hit an obstacle. Game over at
+						0.
+					</li>
+					<!-- <li>
             Power-ups: <b style="color: #0ff">ICE</b> (freeze) and
             <b style="color: #f0f">BOMB</b> (clear obstacle).
           </li> -->
-          <li>Press <b>ESC</b> for settings. Try for a high score!</li>
-        </ul>
-      </div>
-    </div>
-    <style>
-      @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap");
+					<li>
+						Press <b>ESC</b> for settings. Try for a high score!
+					</li>
+				</ul>
+			</div>
+		</div>
+		<style>
+			@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
 
-      @keyframes borderGlow {
-        0% {
-          box-shadow: 0 4px 32px #0ff4, 0 0 0 2px #0ff4;
-        }
-        50% {
-          box-shadow: 0 4px 32px #a0f4, 0 0 0 2px #a0f4;
-        }
-        100% {
-          box-shadow: 0 4px 32px #0ff4, 0 0 0 2px #0ff4;
-        }
-      }
+			@keyframes borderGlow {
+				0% {
+					box-shadow:
+						0 4px 32px #0ff4,
+						0 0 0 2px #0ff4;
+				}
+				50% {
+					box-shadow:
+						0 4px 32px #a0f4,
+						0 0 0 2px #a0f4;
+				}
+				100% {
+					box-shadow:
+						0 4px 32px #0ff4,
+						0 0 0 2px #0ff4;
+				}
+			}
 
-      @keyframes crtFlicker {
-        0% {
-          background: rgba(255, 255, 255, 0);
-        }
-        3% {
-          background: rgba(255, 255, 255, 0.02);
-        }
-        6% {
-          background: rgba(255, 255, 255, 0);
-        }
-        7% {
-          background: rgba(255, 255, 255, 0.04);
-        }
-        8% {
-          background: rgba(255, 255, 255, 0);
-        }
-        9% {
-          background: rgba(255, 255, 255, 0.05);
-        }
-        10% {
-          background: rgba(255, 255, 255, 0);
-        }
-        30% {
-          background: rgba(255, 255, 255, 0);
-        }
-        31% {
-          background: rgba(255, 255, 255, 0.03);
-        }
-        32% {
-          background: rgba(255, 255, 255, 0);
-        }
-        55% {
-          background: rgba(255, 255, 255, 0);
-        }
-        56% {
-          background: rgba(255, 255, 255, 0.04);
-        }
-        57% {
-          background: rgba(255, 255, 255, 0);
-        }
-        85% {
-          background: rgba(255, 255, 255, 0);
-        }
-        86% {
-          background: rgba(255, 255, 255, 0.03);
-        }
-        87% {
-          background: rgba(255, 255, 255, 0);
-        }
-        98% {
-          background: rgba(255, 255, 255, 0);
-        }
-        99% {
-          background: rgba(255, 255, 255, 0.04);
-        }
-        100% {
-          background: rgba(255, 255, 255, 0);
-        }
-      }
+			@keyframes crtFlicker {
+				0% {
+					background: rgba(255, 255, 255, 0);
+				}
+				3% {
+					background: rgba(255, 255, 255, 0.02);
+				}
+				6% {
+					background: rgba(255, 255, 255, 0);
+				}
+				7% {
+					background: rgba(255, 255, 255, 0.04);
+				}
+				8% {
+					background: rgba(255, 255, 255, 0);
+				}
+				9% {
+					background: rgba(255, 255, 255, 0.05);
+				}
+				10% {
+					background: rgba(255, 255, 255, 0);
+				}
+				30% {
+					background: rgba(255, 255, 255, 0);
+				}
+				31% {
+					background: rgba(255, 255, 255, 0.03);
+				}
+				32% {
+					background: rgba(255, 255, 255, 0);
+				}
+				55% {
+					background: rgba(255, 255, 255, 0);
+				}
+				56% {
+					background: rgba(255, 255, 255, 0.04);
+				}
+				57% {
+					background: rgba(255, 255, 255, 0);
+				}
+				85% {
+					background: rgba(255, 255, 255, 0);
+				}
+				86% {
+					background: rgba(255, 255, 255, 0.03);
+				}
+				87% {
+					background: rgba(255, 255, 255, 0);
+				}
+				98% {
+					background: rgba(255, 255, 255, 0);
+				}
+				99% {
+					background: rgba(255, 255, 255, 0.04);
+				}
+				100% {
+					background: rgba(255, 255, 255, 0);
+				}
+			}
 
-      .corner {
-        animation: cornerFlash 3s infinite;
-      }
+			.corner {
+				animation: cornerFlash 3s infinite;
+			}
 
-      .top-left {
-        animation-delay: 0s;
-      }
+			.top-left {
+				animation-delay: 0s;
+			}
 
-      .top-right {
-        animation-delay: 0.75s;
-      }
+			.top-right {
+				animation-delay: 0.75s;
+			}
 
-      .bottom-left {
-        animation-delay: 1.5s;
-      }
+			.bottom-left {
+				animation-delay: 1.5s;
+			}
 
-      .bottom-right {
-        animation-delay: 2.25s;
-      }
+			.bottom-right {
+				animation-delay: 2.25s;
+			}
 
-      #game-container {
-        animation: pulseGlow 4s infinite;
-      }
+			#game-container {
+				animation: pulseGlow 4s infinite;
+			}
 
-      .crt-flicker {
-        animation: crtFlicker 8s infinite;
-      }
-    </style>
-    <script type="module" src="/src/main.ts"></script>
-  </body>
+			.crt-flicker {
+				animation: crtFlicker 8s infinite;
+			}
+		</style>
+		<script type="module" src="/src/main.ts"></script>
+	</body>
 </html>

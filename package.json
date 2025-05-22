@@ -1,29 +1,37 @@
 {
-  "name": "yakitsu",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview",
-    "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
-    "format": "prettier --write ."
-  },
-  "devDependencies": {
-    "eslint": "^9.27.0",
-    "husky": "^9.1.7",
-    "prettier": "^3.5.3",
-    "typescript": "~5.8.3",
-    "vite": "^6.3.5"
-  },
-  "dependencies": {
-    "phaser": "^3.88.2"
-  },
-  "license": "MIT",
-  "husky": {
-    "hooks": {
-      "pre-commit": "npm run lint && npm run format"
-    }
-  }
+	"name": "yakitsu",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"scripts": {
+		"dev": "vite",
+		"build": "tsc && vite build",
+		"preview": "vite preview",
+		"lint": "eslint . --ext .js,.jsx,.ts,.tsx",
+		"format": "prettier --write .",
+		"prepare": "husky"
+	},
+	"devDependencies": {
+		"eslint": "^9.27.0",
+		"globals": "^16.1.0",
+		"husky": "^9.1.7",
+		"lint-staged": "^16.0.0",
+		"prettier": "^3.5.3",
+		"typescript": "~5.8.3",
+		"typescript-eslint": "^8.32.1",
+		"vite": "^6.3.5"
+	},
+	"dependencies": {
+		"phaser": "^3.88.2"
+	},
+	"license": "MIT",
+	"lint-staged": {
+		"*.{js,jsx,ts,tsx}": [
+			"eslint --fix",
+			"prettier --write"
+		],
+		"*.{json,md,html,css}": [
+			"prettier --write"
+		]
+	}
 }

@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { TypingEngine } from '../systems/typingEngine';
-import { loadData, saveRun } from '../systems/persistence';
+import { loadData, saveRun, type SaveData } from '../systems/persistence';
 import { SettingsModal } from '../systems/SettingsModal';
 import { GameOverModal } from '../systems/GameOverModal';
 import { Monster } from '../systems/Monster';
@@ -49,6 +49,12 @@ export default class Play extends Phaser.Scene {
     private escKeyHandler: (event: KeyboardEvent) => void = () => this.handleEscKey();
     private avatarBody!: Phaser.Physics.Arcade.Sprite;
     private monsterBody!: Phaser.Physics.Arcade.Sprite;
+    private runSound!: Phaser.Sound.BaseSound;
+    private speedUpSound!: Phaser.Sound.BaseSound;
+    private monsterHitSound!: Phaser.Sound.BaseSound;
+    private clickSound!: Phaser.Sound.BaseSound;
+    private bgMusic!: Phaser.Sound.BaseSound;
+    private settings!: Partial<SaveData['settings']>;
 
     constructor() {
         super('Play');
@@ -118,6 +124,41 @@ export default class Play extends Phaser.Scene {
         this.hardWords = this.cache.json.get('hardWords') || [];
         const firstWord = this.getNextWord();
         this.engine = new TypingEngine(firstWord);
+        this.settings = loadData().settings;
+
+        // Set up sounds
+        // Background music for gameplay
+        this.bgMusic = this.sound.add('bgMusic', {
+            volume: 0.17,
+            loop: true
+        });
+
+        // Register the game music globally
+        this.game.registry.set('bgMusic', this.bgMusic);
+
+        // Only play if not muted
+        if (!this.settings.muted) {
+            this.bgMusic.play();
+        } else {
+            this.bgMusic.pause();
+        }
+
+        // Add sound effects
+        this.runSound = this.sound.add('runSound', {
+            volume: 1,
+            loop: true
+        });
+
+        // Play running sound if not muted
+        if (!this.settings.muted) {
+            this.runSound.play();
+        } else {
+            this.runSound.pause();
+        }
+        this.speedUpSound = this.sound.add('speedUpSound', { volume: 0.5 });
+        this.monsterHitSound = this.sound.add('monsterHitSound', { volume: 0.6 });
+        this.clickSound = this.sound.add('clickSound', { volume: 0.7 });
+
 
         // Set camera background to transparent
         // this.cameras.main.setBackgroundColor('rgba(0, 0, 0, 0)');
@@ -169,9 +210,11 @@ export default class Play extends Phaser.Scene {
             this.updateWordDisplay();
             if (ok) {
                 this.flashCaret('#0f0');
-                // Play hit animation on correct key press
+                this.infoText.setText('');
+                // Play hit animation and sound on correct key press
                 if (this.monster) {
                     this.monster.playHitAnimation();
+
                 }
                 if (this.engine.isComplete()) {
                     if (this.powerUpType) {
@@ -185,11 +228,12 @@ export default class Play extends Phaser.Scene {
                 this.updateHUD();
                 this.infoText.setText('Wrong key!');
                 this.obstacleSpeed *= this.speedMultiplier;
+
+
                 this.time.delayedCall(500, () => {
                     this.obstacleSpeed /= this.speedMultiplier;
                 });
-                const { lockInputOnMistake } = loadData().settings;
-                if (lockInputOnMistake) {
+                if (this.settings.lockInputOnMistake) {
                     this.inputLocked = true;
                     this.time.delayedCall(500, () => { this.inputLocked = false; });
                 }
@@ -206,23 +250,26 @@ export default class Play extends Phaser.Scene {
     createHUD() {
         // Lives (hearts)
         this.livesText = this.add.text(20, 20, '', {
-            font: '28px monospace',
+            fontFamily: 'Retro Font',
+            fontSize: '34px',
             color: '#f44',
         }).setOrigin(0, 0).setDepth(20);
         // Score
         this.scoreText = this.add.text(this.scale.width - 20, 20, '', {
-            font: '28px monospace',
+            fontFamily: 'Retro Font',
+            fontSize: '28px',
             color: '#fff',
         }).setOrigin(1, 0).setDepth(20);
         // Combo
         this.comboText = this.add.text(this.scale.width - 20, 60, '', {
-            font: '20px monospace',
+            fontFamily: 'Retro Font',
+            fontSize: '20px',
             color: '#0ff',
         }).setOrigin(1, 0).setDepth(20);
     }
 
     updateHUD() {
-        this.livesText.setText('♥'.repeat(this.lives));
+        this.livesText.setText('❤️'.repeat(this.lives));
         this.scoreText.setText(`Score: ${this.score}`);
         this.comboText.setText(`Combo: ${this.combo}`);
         // Reposition on resize
@@ -282,6 +329,9 @@ export default class Play extends Phaser.Scene {
     triggerGameOver() {
         this.gameOverTriggered = true;
 
+        // Stop all sounds
+        this.stopAllSounds();
+
         // Save best score before showing game over modal
         if (typeof saveRun === 'function') {
             saveRun(this.score);
@@ -304,7 +354,7 @@ export default class Play extends Phaser.Scene {
         );
         this.children.add(modal);
         // Fallback: also switch to GameOver scene after 10s if modal not used
-        this.time.delayedCall(10000, () => {
+        this.time.delayedCall(2000, () => {
             if (this.scene.isActive('Play')) {
                 this.scene.start('GameOver', { score: this.score });
             }
@@ -342,23 +392,31 @@ export default class Play extends Phaser.Scene {
 
     createText() {
         const { width, height } = this.scale;
+        const letterSpacing = 5;
         this.typedText = this.add.text(width / 2, height / 2 - 20, '', {
-            font: '32px monospace',
+            fontFamily: 'Retro Font',
+            fontSize: '32px',
             color: '#0f0',
-        }).setOrigin(0, 0.5).setDepth(20); // Ensure text is above everything
+            letterSpacing,
+        }).setOrigin(0, 0.5).setDepth(20).setAlpha(0.2);
 
-        this.caretText = this.add.text(0, height / 2 - 20, '', {
-            font: '32px monospace',
+        this.caretText = this.add.text(-20, height / 2 - 20, '', {
+            fontFamily: 'Retro Font',
+            fontSize: '32px',
             color: '#ff0',
+            letterSpacing,
         }).setOrigin(0, 0.5).setDepth(20);
 
         this.remainingText = this.add.text(0, height / 2 - 20, '', {
-            font: '32px monospace',
+            fontFamily: 'Retro Font',
+            fontSize: '32px',
             color: '#fff',
+            letterSpacing,
         }).setOrigin(0, 0.5).setDepth(20);
 
         this.infoText = this.add.text(width / 2, height / 2 + 40, '', {
-            font: '24px monospace',
+            fontFamily: 'Retro Font',
+            fontSize: '24px',
             color: '#0ff',
         }).setOrigin(0.5).setDepth(20);
     }
@@ -437,9 +495,8 @@ export default class Play extends Phaser.Scene {
     }
 
     updateWordDisplay() {
-        const word = this.engine.getWord();
+        const word = this.engine.getWord().toUpperCase();
         const caret = this.engine.getCaret();
-        const { width } = this.scale;
         const typed = word.slice(0, caret);
         const caretChar = caret < word.length ? word[caret] : '';
         const remaining = caret < word.length ? word.slice(caret + 1) : '';
@@ -448,7 +505,7 @@ export default class Play extends Phaser.Scene {
         this.remainingText.setText(remaining);
         // Position segments in sequence, centered
         const totalWidth = this.typedText.width + this.caretText.width + this.remainingText.width;
-        let startX = width / 2 - totalWidth / 2;
+        let startX = this.scale.width / 2 - totalWidth / 2;
         this.typedText.setX(startX);
         this.caretText.setX(startX + this.typedText.width);
         this.remainingText.setX(startX + this.typedText.width + this.caretText.width);
@@ -627,7 +684,15 @@ export default class Play extends Phaser.Scene {
         document.addEventListener('fullscreenchange', this.fullscreenChangeHandler);
     }
 
+    stopAllSounds() {
+        if (this.bgMusic) this.bgMusic.stop();
+        if (this.runSound) this.runSound.stop();
+    }
+
     shutdown() {
+        // Stop all sounds
+        this.stopAllSounds();
+
         // Remove event listeners to prevent memory leaks
         if (this.resizeHandler) {
             this.scale.off('resize', this.resizeHandler);
@@ -650,9 +715,11 @@ export default class Play extends Phaser.Scene {
                 // Disable collision detection during death animation
                 this.obstacleFrozen = true;
 
+                if (!this.settings.muted) {
+                    this.monsterHitSound.play();
+                }
                 // Play death animation and wait for it to complete
                 await this.monster.playDeathAnimation();
-
                 // Re-enable collision detection
                 this.obstacleFrozen = false;
             }
@@ -699,10 +766,18 @@ export default class Play extends Phaser.Scene {
 
         this.baseObstacleSpeed = this.baseObstacleSpeed * (1 + speedIncrease * 0.1);
         this.obstacleSpeed = this.baseObstacleSpeed;
+
+        // Play speed up sound on mistake
+        if (!this.settings.muted) {
+            this.speedUpSound.play();
+        }
     }
 
     // Add a new method to pause/resume game animations
     pauseGameAnimations(pause: boolean) {
+
+        this.settings = loadData().settings;
+
         // Pause/resume monster animations
         if (this.monster) {
             if (pause) {
@@ -716,8 +791,24 @@ export default class Play extends Phaser.Scene {
         if (this.avatar) {
             if (pause) {
                 this.avatar.anims.pause();
+                // Pause running sound
+                if (this.runSound && this.runSound.isPlaying) {
+                    this.runSound.pause();
+                }
+
+                if (this.speedUpSound && this.speedUpSound.isPlaying) {
+                    this.speedUpSound.pause();
+                }
+
             } else {
                 this.avatar.anims.resume();
+                // Resume running sound if not muted
+                if (this.runSound && !this.settings.muted) {
+                    this.runSound.resume();
+                }
+                if (this.speedUpSound && !this.settings.muted) {
+                    this.speedUpSound.resume();
+                }
             }
         }
 
@@ -725,14 +816,47 @@ export default class Play extends Phaser.Scene {
         this.obstacleFrozen = pause;
     }
 
+    // Pause all game sounds (music + SFX)
+    pauseAllGameSounds() {
+        if (this.bgMusic && this.bgMusic.isPlaying) this.bgMusic.pause();
+        if (this.runSound && this.runSound.isPlaying) this.runSound.pause();
+        if (this.speedUpSound && this.speedUpSound.isPlaying) this.speedUpSound.pause();
+        if (this.monsterHitSound && this.monsterHitSound.isPlaying) this.monsterHitSound.pause();
+        if (this.clickSound && this.clickSound.isPlaying) this.clickSound.pause();
+    }
+
+    // Resume all game sounds if not muted, otherwise keep them paused
+    resumeAllGameSounds() {
+        this.settings = loadData().settings;
+        if (!this.settings.muted) {
+            if (this.bgMusic && this.bgMusic.isPaused) this.bgMusic.resume();
+            if (this.runSound && this.runSound.isPaused) this.runSound.resume();
+            if (this.speedUpSound && this.speedUpSound.isPaused) this.speedUpSound.resume();
+            // SFX like monsterHitSound/clickSound are one-shots, don't resume
+        } else {
+            if (this.bgMusic && this.bgMusic.isPlaying) this.bgMusic.pause();
+            if (this.runSound && this.runSound.isPlaying) this.runSound.pause();
+            if (this.speedUpSound && this.speedUpSound.isPlaying) this.speedUpSound.pause();
+        }
+    }
+
     handleEscKey() {
         if (this.settingsModalOpen) return;
+
+        this.settings = loadData().settings;
 
         this.settingsModalOpen = true;
         this.input.keyboard!.enabled = false;
 
         // Pause animations and game physics
         this.pauseGameAnimations(true);
+        // Pause all sounds
+        this.pauseAllGameSounds();
+
+        // Play pause sound if not muted
+        if (!this.settings.muted) {
+            this.sound.play('pauseSound');
+        }
 
         const modal = new SettingsModal(this, () => {
             this.settingsModalOpen = false;
@@ -740,6 +864,14 @@ export default class Play extends Phaser.Scene {
 
             // Resume animations and game physics
             this.pauseGameAnimations(false);
+            // Resume or keep paused all sounds based on mute
+            this.resumeAllGameSounds();
+
+            this.settings = loadData().settings;
+            // Play unpause sound if not muted
+            if (!this.settings.muted) {
+                this.sound.play('unpauseSound');
+            }
         });
         this.children.add(modal);
 

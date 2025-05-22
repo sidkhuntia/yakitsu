@@ -17,8 +17,9 @@ export default class GameOver extends Phaser.Scene {
 
     create() {
         const { width, height } = this.scale;
+        this.add.image(width / 2, height / 2, 'gameOverBackground').setOrigin(0.5);
         this.add.text(width / 2, height / 2 - 60, 'Game Over', {
-            font: '48px monospace',
+            font: '48px Retro Font',
             color: '#f44',
         }).setOrigin(0.5);
 
@@ -31,34 +32,35 @@ export default class GameOver extends Phaser.Scene {
         }
         if (congrats) {
             this.add.text(width / 2, height / 2 - 110, congrats, {
-                font: '32px monospace',
+                font: '32px Retro Font',
                 color: '#0ff',
             }).setOrigin(0.5);
         }
 
         this.add.text(width / 2, height / 2, `Score: ${this.score}\nBest: ${this.bestScore}`, {
-            font: '32px monospace',
+            font: '32px Retro Font',
             color: '#fff',
             align: 'center',
         }).setOrigin(0.5);
 
-        const retryBtn = this.add.text(width / 2, height / 2 + 60, '[ Retry ]', {
-            font: '28px monospace',
-            color: '#0f0',
-            backgroundColor: '#222',
-            padding: { left: 16, right: 16, top: 8, bottom: 8 },
-        }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+        // const retryBtn = this.add.text(width / 2, height / 2 + 60, '[ Retry ]', {
+        //     font: '28px monospace',
+        //     color: '#0f0',
+        //     backgroundColor: '#222',
+        //     padding: { left: 16, right: 16, top: 8, bottom: 8 },
+        // }).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
         const menuBtn = this.add.text(width / 2, height / 2 + 110, '[ Menu ]', {
-            font: '28px monospace',
+            font: '28px Retro Font',
             color: '#0ff',
             backgroundColor: '#222',
             padding: { left: 16, right: 16, top: 8, bottom: 8 },
         }).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
-        retryBtn.on('pointerdown', () => {
-            this.scene.start('Play');
-        });
+        // retryBtn.on('pointerdown', () => {
+        //     this.scene.start('Play');
+        // });
         menuBtn.on('pointerdown', () => {
             this.scene.start('Menu');
         });

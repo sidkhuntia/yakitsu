@@ -7,6 +7,24 @@ export default class Boot extends Phaser.Scene {
 
     preload() {
         this.load.image('logo', 'assets/placeholder.png'); // Replace with your logo file
+        this.load.image('menuBackground', 'assets/menu_background.png');
+        this.load.image('gameOverBackground', 'assets/gameover_background.png');
+
+        // Load background music
+        this.load.audio('bgMusic', 'assets/audio/background_music.wav');
+        this.load.audio('menuMusic', 'assets/audio/ui/menu_background_music.mp3');
+
+        // Load UI sounds
+        this.load.audio('clickSound', 'assets/audio/ui/click.mp3');
+        this.load.audio('pauseSound', 'assets/audio/ui/pause.wav');
+        this.load.audio('unpauseSound', 'assets/audio/ui/unpause.wav');
+
+        // Load avatar sounds
+        this.load.audio('runSound', 'assets/audio/avatar/run.wav');
+        this.load.audio('speedUpSound', 'assets/audio/avatar/speed_up.wav');
+
+        // Load monster sounds
+        this.load.audio('monsterHitSound', 'assets/audio/monsters/hit.wav');
     }
 
     create() {
@@ -22,7 +40,7 @@ export default class Boot extends Phaser.Scene {
         });
         // Loading text
         const loadingText = this.add.text(width / 2, height / 2 + 60, 'Loading...', {
-            font: '24px monospace',
+            font: '24px Retro Font',
             color: '#aaa',
         }).setOrigin(0.5).setAlpha(0);
         this.tweens.add({

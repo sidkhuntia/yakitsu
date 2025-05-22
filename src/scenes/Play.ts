@@ -6,6 +6,12 @@ import { GameOverModal } from '../systems/GameOverModal';
 import { Monster } from '../systems/Monster';
 import type { MonsterType } from '../systems/Monster';
 
+declare global {
+    interface Window {
+        THESAURUS: any;
+    }
+}
+
 function getRandom(arr: string[]): string {
     return arr[Math.floor(Math.random() * arr.length)];
 }
@@ -29,6 +35,8 @@ export default class Play extends Phaser.Scene {
     private easyWords: string[] = [];
     private mediumWords: string[] = [];
     private hardWords: string[] = [];
+    private bigWords: string[] = [];
+    private largeWords: string[] = [];
     private wordsCompleted = 0;
     private caretFlashTimer?: Phaser.Time.TimerEvent;
     private powerUpType: 'ice' | 'bomb' | null = null;
@@ -63,9 +71,7 @@ export default class Play extends Phaser.Scene {
     preload() {
         this.load.image('ice', 'assets/ice.png');
         this.load.image('bomb', 'assets/bomb.png');
-        this.load.json('easyWords', 'data/words/easy.json');
-        this.load.json('mediumWords', 'data/words/medium.json');
-        this.load.json('hardWords', 'data/words/hard.json');
+        this.load.script('words', 'data/words/words.js');
 
         // Load all background layers
         for (let i = 2; i <= 11; i++) {
@@ -119,9 +125,12 @@ export default class Play extends Phaser.Scene {
         this.wordsCompleted = 0;
         this.obstacleSpeed = this.baseObstacleSpeed;
         this.difficultyLevel = 1;
-        this.easyWords = this.cache.json.get('easyWords') || [];
-        this.mediumWords = this.cache.json.get('mediumWords') || [];
-        this.hardWords = this.cache.json.get('hardWords') || [];
+        // Use THESAURUS from words.js
+        this.easyWords = window.THESAURUS?.three || [];
+        this.mediumWords = window.THESAURUS?.small || [];
+        this.hardWords = window.THESAURUS?.medium || [];
+        this.bigWords = window.THESAURUS?.big || [];
+        this.largeWords = window.THESAURUS?.large || [];
         const firstWord = this.getNextWord();
         this.engine = new TypingEngine(firstWord);
         this.settings = loadData().settings;
@@ -206,7 +215,7 @@ export default class Play extends Phaser.Scene {
             if (this.engine.isComplete() || this.gameOverTriggered || this.inputLocked) return;
             // Only allow a-z or A-Z
             if (!/^[a-zA-Z]$/.test(event.key)) return;
-            const ok = this.engine.input(event.key);
+            const ok = this.engine.input(event.key.toUpperCase());
             this.updateWordDisplay();
             if (ok) {
                 this.flashCaret('#0f0');
@@ -278,12 +287,13 @@ export default class Play extends Phaser.Scene {
     }
 
     getNextWord(): string {
-        // Level progression: every 10 words, increase tier
-        const level = Math.floor(this.wordsCompleted / 10);
-        if (level === 0 && this.easyWords.length) return getRandom(this.easyWords);
-        if (level === 1 && this.mediumWords.length) return getRandom(this.mediumWords);
-        if (level >= 2 && this.hardWords.length) return getRandom(this.hardWords);
-        // fallback
+        // Level progression: 0-9: three, 10-19: small, 20-39: medium, 40-59: big, 60+: large
+        const w = this.wordsCompleted;
+        if (w < 10 && this.easyWords.length) return getRandom(this.easyWords);
+        if (w < 20 && this.mediumWords.length) return getRandom(this.mediumWords);
+        if (w < 40 && this.hardWords.length) return getRandom(this.hardWords);
+        if (w < 60 && this.bigWords?.length) return getRandom(this.bigWords);
+        if (this.largeWords?.length) return getRandom(this.largeWords);
         return 'yakitsu';
     }
 
@@ -398,7 +408,7 @@ export default class Play extends Phaser.Scene {
             fontSize: '32px',
             color: '#0f0',
             letterSpacing,
-        }).setOrigin(0, 0.5).setDepth(20).setAlpha(0.2);
+        }).setOrigin(0, 0.5).setDepth(20).setAlpha(0.1);
 
         this.caretText = this.add.text(-20, height / 2 - 20, '', {
             fontFamily: 'Retro Font',

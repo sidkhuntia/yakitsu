@@ -6,25 +6,20 @@ export default class Boot extends Phaser.Scene {
     }
 
     preload() {
-        this.load.image('logo', 'assets/placeholder.png'); // Replace with your logo file
+        this.load.image('logo', 'assets/placeholder.png'); // Your logo
         this.load.image('menuBackground', 'assets/menu_background.png');
-        this.load.image('gameOverBackground', 'assets/gameover_background.png');
-
-        // Load background music
-        this.load.audio('bgMusic', 'assets/audio/background_music.wav');
+        // Removed: gameOverBackground - can load in Menu or a dedicated GameOver_Preload scene if large
+        // Removed: bgMusic (Play scene)
         this.load.audio('menuMusic', 'assets/audio/ui/menu_background_music.mp3');
 
-        // Load UI sounds
+        // UI sounds needed early
         this.load.audio('clickSound', 'assets/audio/ui/click.mp3');
         this.load.audio('pauseSound', 'assets/audio/ui/pause.wav');
         this.load.audio('unpauseSound', 'assets/audio/ui/unpause.wav');
 
-        // Load avatar sounds
-        this.load.audio('runSound', 'assets/audio/avatar/run.wav');
-        this.load.audio('speedUpSound', 'assets/audio/avatar/speed_up.wav');
-
-        // Load monster sounds
-        this.load.audio('monsterHitSound', 'assets/audio/monsters/hit.wav');
+        // Removed: Avatar sounds (Play scene)
+        // Removed: Monster sounds (Play scene)
+        // Font 'Retro Font' is loaded via CSS @font-face, so not handled by Phaser's loader here.
     }
 
     create() {

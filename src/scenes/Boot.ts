@@ -6,25 +6,25 @@ export default class Boot extends Phaser.Scene {
     }
 
     preload() {
-        this.load.image('logo', 'assets/placeholder.png'); // Replace with your logo file
-        this.load.image('menuBackground', 'assets/menu_background.png');
-        this.load.image('gameOverBackground', 'assets/gameover_background.png');
+        this.load.image('logo', 'assets/placeholder.webp'); // Replace with your logo file
+        this.load.image('menuBackground', 'assets/menu_background.webp');
+        this.load.image('gameOverBackground', 'assets/gameover_background.webp');
 
         // Load background music
-        this.load.audio('bgMusic', 'assets/audio/background_music.wav');
+        this.load.audio('bgMusic', 'assets/audio/background_music.mp3');
         this.load.audio('menuMusic', 'assets/audio/ui/menu_background_music.mp3');
 
         // Load UI sounds
         this.load.audio('clickSound', 'assets/audio/ui/click.mp3');
-        this.load.audio('pauseSound', 'assets/audio/ui/pause.wav');
-        this.load.audio('unpauseSound', 'assets/audio/ui/unpause.wav');
+        this.load.audio('pauseSound', 'assets/audio/ui/pause.mp3');
+        this.load.audio('unpauseSound', 'assets/audio/ui/unpause.mp3');
 
         // Load avatar sounds
-        this.load.audio('runSound', 'assets/audio/avatar/run.wav');
-        this.load.audio('speedUpSound', 'assets/audio/avatar/speed_up.wav');
+        this.load.audio('runSound', 'assets/audio/avatar/run.mp3');
+        this.load.audio('speedUpSound', 'assets/audio/avatar/speed_up.mp3');
 
         // Load monster sounds
-        this.load.audio('monsterHitSound', 'assets/audio/monsters/hit.wav');
+        this.load.audio('monsterHitSound', 'assets/audio/monsters/hit.mp3');
     }
 
     create() {

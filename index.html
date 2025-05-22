@@ -35,11 +35,25 @@
       rel="stylesheet"
     />
   </head>
+  <!-- Google tag (gtag.js) -->
+  <script
+    async
+    src="https://www.googletagmanager.com/gtag/js?id=G-DJD5YDN0Q0"
+  ></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag() {
+      dataLayer.push(arguments);
+    }
+    gtag("js", new Date());
+
+    gtag("config", "G-DJD5YDN0Q0");
+  </script>
   <body style="background: #222; margin: 0">
     <style>
       @font-face {
-        font-family: 'Retro Font';
-        src: url('/assets/fonts/gaming_font.ttf') format('truetype');
+        font-family: "Retro Font";
+        src: url("/assets/fonts/gaming_font.woff2") format("truetype");
         font-weight: normal;
         font-style: normal;
       }
@@ -220,7 +234,9 @@
             font-family: inherit;
           "
         >
-          <li>Type the word above the obstacle before your monster kills you.</li>
+          <li>
+            Type the word above the obstacle before your monster kills you.
+          </li>
           <li>Each correct word increases your score and speed.</li>
           <li>3 lives. Lose one if you hit an obstacle. Game over at 0.</li>
           <!-- <li>

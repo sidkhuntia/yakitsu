@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { TypingEngine } from '../systems/typingEngine';
-import { loadData } from '../systems/persistence';
+import { loadData, saveRun } from '../systems/persistence';
 import { SettingsModal } from '../systems/SettingsModal';
 import { GameOverModal } from '../systems/GameOverModal';
 import { Monster } from '../systems/Monster';
@@ -149,16 +149,18 @@ export default class Play extends Phaser.Scene {
             this.avatarBody.body.setOffset(70, 60);
         }
 
-        // Since the monster is created later, we'll adjust its hitbox when spawning
+        // Initialize the first monster's hitbox properly
+        if (this.monsterBody && this.monsterBody.body) {
+            // Make hitbox much smaller and more precise for better collision
+            this.monsterBody.body.setSize(30, 60, true);
 
-        // Toggle collision debug with D key (for development)
-        this.input.keyboard!.on('keydown-X', () => {
-            this.collisionDebug = !this.collisionDebug;
-            this.physics.world.drawDebug = this.collisionDebug;
-            if (!this.collisionDebug) {
-                this.physics.world.debugGraphic.clear();
-            }
-        });
+            // Calculate precise offset based on monster type
+            const monsterType = this.monster.monsterType || Monster.getRandomType();
+            const config = Monster.getFrameConfig(monsterType);
+
+            // Position hitbox in the monster's torso/center
+            this.monsterBody.body.setOffset(60, 50);
+        }
 
         this.input.keyboard!.on('keydown', (event: KeyboardEvent) => {
             if (this.engine.isComplete() || this.gameOverTriggered || this.inputLocked) return;
@@ -278,8 +280,14 @@ export default class Play extends Phaser.Scene {
         }
     }
 
-     triggerGameOver() {
+    triggerGameOver() {
         this.gameOverTriggered = true;
+
+        // Save best score before showing game over modal
+        if (typeof saveRun === 'function') {
+            saveRun(this.score);
+        }
+
         // Hide all main game text objects to prevent overlap with modal
         this.typedText.setVisible(false);
         this.caretText.setVisible(false);
@@ -638,9 +646,7 @@ export default class Play extends Phaser.Scene {
 
     // Modify the spawnNewMonster method to update physics body
     async spawnNewMonster(playDeathAnimation = true) {
-        console.log('spawnNewMonster');
         if (this.monster) {
-            console.log('monster exists');
             if (playDeathAnimation) {
                 // Disable collision detection during death animation
                 this.obstacleFrozen = true;
@@ -669,15 +675,11 @@ export default class Play extends Phaser.Scene {
 
         // Adjust hitbox size for monster based on type
         if (this.monsterBody.body) {
-            // Make the hitbox smaller than the visual sprite for more accurate collision
-            this.monsterBody.body.setSize(50, 80, true);
+            // Make the hitbox much smaller than the visual sprite for more accurate collision
+            this.monsterBody.body.setSize(30, 60, true);
 
-            // Different monster types have different offsets
-            const config = Monster.getFrameConfig(monsterType);
-            // Adjust collision box position
-            const offsetX = 50; // General offset
-            const offsetY = 50; // General offset
-            this.monsterBody.body.setOffset(offsetX, offsetY);
+            // Position hitbox in the monster's torso/center area
+            this.monsterBody.body.setOffset(60, 50);
         }
 
         // Update power-up position if needed

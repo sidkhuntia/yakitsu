@@ -13,7 +13,7 @@ interface MonsterConfig {
 }
 
 export class Monster extends Phaser.GameObjects.Sprite {
-    private monsterType: MonsterType;
+    public monsterType: MonsterType;
     private isDying: boolean = false;
     private isHit: boolean = false;
     private runAnimKey: string;

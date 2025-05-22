@@ -49,7 +49,6 @@ export default class Play extends Phaser.Scene {
     private escKeyHandler: (event: KeyboardEvent) => void = () => this.handleEscKey();
     private avatarBody!: Phaser.Physics.Arcade.Sprite;
     private monsterBody!: Phaser.Physics.Arcade.Sprite;
-    private collisionDebug: boolean = false;
 
     constructor() {
         super('Play');
@@ -155,8 +154,8 @@ export default class Play extends Phaser.Scene {
             this.monsterBody.body.setSize(30, 60, true);
 
             // Calculate precise offset based on monster type
-            const monsterType = this.monster.monsterType || Monster.getRandomType();
-            const config = Monster.getFrameConfig(monsterType);
+            // const monsterType = this.monster.monsterType || Monster.getRandomType();
+            // const config = Monster.getFrameConfig(monsterType);
 
             // Position hitbox in the monster's torso/center
             this.monsterBody.body.setOffset(60, 50);

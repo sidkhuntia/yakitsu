@@ -247,9 +247,9 @@ export default class Play extends Phaser.Scene {
 					this.monster.playHitAnimation()
 				}
 				if (this.engine.isComplete()) {
-					if (this.powerUpType) {
-						this.handlePowerUp()
-					}
+					// if (this.powerUpType) {
+					// 	this.handlePowerUp()
+					// }
 					this.handleWordComplete()
 				}
 			} else {
@@ -334,7 +334,7 @@ export default class Play extends Phaser.Scene {
 		this.wordsCompleted++
 		this.infoText.setText('Word complete!')
 		this.updateHUD()
-		this.spawnPowerUp()
+		// this.spawnPowerUp()
 
 		// Increase difficulty every 5 words
 		if (this.wordsCompleted % 5 === 0) {

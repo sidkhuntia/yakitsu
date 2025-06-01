@@ -1,6 +1,5 @@
 import Phaser from 'phaser'
 import Boot from './scenes/Boot'
-import Menu from './scenes/Menu'
 import Play from './scenes/Play'
 import GameOver from './scenes/GameOver'
 
@@ -10,7 +9,7 @@ const config: Phaser.Types.Core.GameConfig = {
 	height: 720,
 	backgroundColor: '#222',
 	pixelArt: true,
-	scene: [Boot, Menu, Play, GameOver],
+	scene: [Boot, Play, GameOver],
 	parent: 'app',
 	physics: {
 		default: 'arcade',
@@ -21,7 +20,8 @@ const config: Phaser.Types.Core.GameConfig = {
 	},
 }
 
-new Phaser.Game(config)
+// Create game instance
+const game = new Phaser.Game(config)
 
 // --- Fullscreen Button Logic ---
 window.addEventListener('DOMContentLoaded', () => {
@@ -54,6 +54,65 @@ window.addEventListener('DOMContentLoaded', () => {
 		} else {
 			canvas.classList.add('fullscreen-canvas')
 			if (btn) btn.textContent = 'Exit Full Screen'
+		}
+	})
+
+	// Listen for start game event from HTML
+	window.addEventListener('startGame', () => {
+		// Always restart the Play scene to ensure clean state
+		const playScene = game.scene.getScene('Play')
+		if (playScene && playScene.scene.isActive()) {
+			playScene.scene.restart()
+		} else {
+			game.scene.start('Play')
+		}
+
+		// Hide HTML interface and show game screen
+		const landingScreen = document.getElementById('landing-screen')
+		const gameScreen = document.getElementById('game-screen')
+
+		if (landingScreen) {
+			landingScreen.classList.add('hidden')
+		}
+
+		if (gameScreen) {
+			gameScreen.classList.remove('hidden')
+		}
+	})
+
+	// Listen for return to menu event
+	window.addEventListener('returnToMenu', () => {
+		// Stop all active game scenes
+		const playScene = game.scene.getScene('Play')
+		const gameOverScene = game.scene.getScene('GameOver')
+
+		if (playScene && playScene.scene.isActive()) {
+			game.scene.stop('Play')
+		}
+
+		if (gameOverScene && gameOverScene.scene.isActive()) {
+			game.scene.stop('GameOver')
+		}
+
+		// Ensure the HTML interface is properly shown
+		const landingScreen = document.getElementById('landing-screen')
+		const gameScreen = document.getElementById('game-screen')
+
+		if (landingScreen) {
+			landingScreen.classList.remove('hidden')
+		}
+
+		if (gameScreen) {
+			gameScreen.classList.add('hidden')
+		}
+
+		// Update high score display in case it changed
+		const highScoreElement = document.getElementById('high-score-value')
+		if (highScoreElement) {
+			const savedData = JSON.parse(
+				localStorage.getItem('yatiksu-save-v1') || '{"bestScore": 0}',
+			)
+			highScoreElement.textContent = savedData.bestScore.toString()
 		}
 	})
 })

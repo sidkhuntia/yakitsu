@@ -1,13 +1,11 @@
 import Phaser from 'phaser'
 import { updateSettings, loadData, saveRun } from './persistence'
-import Play from '../scenes/Play'
 
 export class SettingsModal extends Phaser.GameObjects.Container {
 	private bg: Phaser.GameObjects.Rectangle
 	private panel: Phaser.GameObjects.Rectangle
 	private musicBtn: Phaser.GameObjects.Text
 	private lockInputBtn: Phaser.GameObjects.Text
-	private quitBtn: Phaser.GameObjects.Text
 	private clearBtn: Phaser.GameObjects.Text
 	private closeBtn: Phaser.GameObjects.Text
 	private onClose: () => void
@@ -25,15 +23,15 @@ export class SettingsModal extends Phaser.GameObjects.Container {
 			.rectangle(width / 2, height / 2, width, height, 0x000000, 0.5)
 			.setInteractive()
 		this.panel = scene.add
-			.rectangle(width / 2, height / 2, 400, 320, 0x222233, 0.98)
-			.setStrokeStyle(2, 0x8888aa)
+			.rectangle(width / 2, height / 2, 400, 280, 0x0f1419, 0.98)
+			.setStrokeStyle(2, 0x00e676)
 		const baseY = height / 2 - 80
 		this.musicBtn = scene.add
 			.text(width / 2, baseY, '', {
 				fontFamily: 'Retro Font',
 				fontSize: '24px',
-				color: '#fff',
-				backgroundColor: '#333',
+				color: '#e1f5fe',
+				backgroundColor: '#1a2332',
 				padding: { left: 12, right: 12, top: 6, bottom: 6 },
 			})
 			.setOrigin(0.5)
@@ -42,38 +40,28 @@ export class SettingsModal extends Phaser.GameObjects.Container {
 			.text(width / 2, baseY + 60, '', {
 				fontFamily: 'Retro Font',
 				fontSize: '20px',
-				color: '#fff',
-				backgroundColor: '#333',
-				padding: { left: 12, right: 12, top: 6, bottom: 6 },
-			})
-			.setOrigin(0.5)
-			.setInteractive()
-		this.quitBtn = scene.add
-			.text(width / 2, baseY + 120, 'Quit to Menu', {
-				fontFamily: 'Retro Font',
-				fontSize: '20px',
-				color: '#f39c12',
-				backgroundColor: '#333',
+				color: '#e1f5fe',
+				backgroundColor: '#1a2332',
 				padding: { left: 12, right: 12, top: 6, bottom: 6 },
 			})
 			.setOrigin(0.5)
 			.setInteractive()
 		this.clearBtn = scene.add
-			.text(width / 2, baseY + 180, 'Clear Highscores', {
+			.text(width / 2, baseY + 120, 'Clear Highscores', {
 				fontFamily: 'Retro Font',
 				fontSize: '20px',
-				color: '#f44',
-				backgroundColor: '#333',
+				color: '#ff5722',
+				backgroundColor: '#1a2332',
 				padding: { left: 12, right: 12, top: 6, bottom: 6 },
 			})
 			.setOrigin(0.5)
 			.setInteractive()
 		this.closeBtn = scene.add
-			.text(width / 2, baseY + 240, '[ Close ]', {
+			.text(width / 2, baseY + 180, '[ Close ]', {
 				fontFamily: 'Retro Font',
 				fontSize: '20px',
-				color: '#0ff',
-				backgroundColor: '#222',
+				color: '#64ffda',
+				backgroundColor: '#1e3a8a',
 				padding: { left: 12, right: 12, top: 6, bottom: 6 },
 			})
 			.setOrigin(0.5)
@@ -83,7 +71,6 @@ export class SettingsModal extends Phaser.GameObjects.Container {
 			this.panel,
 			this.musicBtn,
 			this.lockInputBtn,
-			this.quitBtn,
 			this.clearBtn,
 			this.closeBtn,
 		])
@@ -115,25 +102,6 @@ export class SettingsModal extends Phaser.GameObjects.Container {
 			}
 
 			this.refresh()
-		})
-
-		this.quitBtn.on('pointerdown', () => {
-			const settings = loadData().settings
-			// Play click sound if not muted
-			if (!settings.muted) {
-				this.clickSound.play()
-			}
-
-			// Get current score from the Play scene
-			const playScene = this.scene.scene.get('Play') as Play
-			if (playScene && playScene.score !== undefined) {
-				// Save the current score
-				saveRun(playScene.score)
-			}
-
-			// Destroy modal and quit to menu
-			this.destroy()
-			this.scene.scene.start('Menu')
 		})
 
 		this.clearBtn.on('pointerdown', () => {

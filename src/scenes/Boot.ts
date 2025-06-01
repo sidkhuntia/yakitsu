@@ -64,7 +64,8 @@ export default class Boot extends Phaser.Scene {
 			this.cameras.main.fadeOut(400, 24, 24, 32)
 		})
 		this.cameras.main.once('camerafadeoutcomplete', () => {
-			this.scene.start('Menu')
+			// Don't auto-start any scene - let HTML interface control startup
+			// this.scene.start('Menu')
 		})
 	}
 }

@@ -457,7 +457,8 @@ export default class Play extends Phaser.Scene {
 				this.scene.restart()
 			},
 			() => {
-				this.scene.start('Menu')
+				// Trigger return to menu event for HTML
+				window.dispatchEvent(new CustomEvent('returnToMenu'))
 			},
 		)
 		this.children.add(modal)
@@ -780,10 +781,27 @@ export default class Play extends Phaser.Scene {
 		// Clean up timers
 		if (this.statsUpdateTimer) {
 			this.statsUpdateTimer.remove()
+			this.statsUpdateTimer = undefined
 		}
 
-		// Remove the ESC key handler
+		if (this.caretFlashTimer) {
+			this.caretFlashTimer.remove(false)
+			this.caretFlashTimer = undefined
+		}
+
+		// Remove all keyboard event handlers
 		this.input.keyboard?.off('keydown-ESC', this.escKeyHandler)
+		this.input.keyboard?.removeAllListeners()
+
+		// Reset flags and states
+		this.gameOverTriggered = false
+		this.settingsModalOpen = false
+		this.inputLocked = false
+		this.obstacleFrozen = false
+
+		// Clean up arrays
+		this.backgroundLayers = []
+		this.groundLayers = []
 	}
 
 	// Modify the spawnNewMonster method to update physics body
@@ -932,7 +950,10 @@ export default class Play extends Phaser.Scene {
 	}
 
 	handleEscKey() {
-		if (this.settingsModalOpen) return
+		if (this.settingsModalOpen) {
+			// If modal is already open, close it
+			return
+		}
 
 		this.settings = loadData().settings
 

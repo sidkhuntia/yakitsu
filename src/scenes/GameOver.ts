@@ -97,7 +97,14 @@ export default class GameOver extends Phaser.Scene {
 		//     this.scene.start('Play');
 		// });
 		menuBtn.on('pointerdown', () => {
-			this.scene.start('Menu')
+			// Stop all sounds
+			this.sound.stopAll()
+
+			// Stop the current GameOver scene
+			this.scene.stop('GameOver')
+
+			// Trigger return to menu event for HTML
+			window.dispatchEvent(new CustomEvent('returnToMenu'))
 		})
 	}
 }

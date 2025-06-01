@@ -77,7 +77,16 @@ export default class Menu extends Phaser.Scene {
 			.setOrigin(0.5)
 			.setInteractive({ useHandCursor: true })
 
-		startBtn.on('pointerdown', () => {
+		// Add instruction text for spacebar
+		this.add
+			.text(width / 2, height / 2 + 120, 'Press SPACE to start', {
+				font: '18px Retro Font',
+				color: '#888',
+				align: 'center',
+			})
+			.setOrigin(0.5)
+
+		const startGame = () => {
 			// Play click sound if not muted
 			if (!settings.muted) {
 				this.clickSound.play()
@@ -87,6 +96,28 @@ export default class Menu extends Phaser.Scene {
 			this.music.stop()
 
 			this.scene.start('Play')
+		}
+
+		startBtn.on('pointerdown', startGame)
+
+		// Add spacebar functionality with proper event handling
+		this.input.keyboard!.on('keydown-SPACE', (event: KeyboardEvent) => {
+			event.preventDefault() // Prevent default spacebar behavior (scrolling)
+			startGame()
 		})
+
+		// // Also prevent default spacebar behavior on the document level for this scene
+		// const preventSpaceScroll = (e: KeyboardEvent) => {
+		// 	if (e.code === 'Space') {
+		// 		e.preventDefault()
+		// 	}
+		// }
+
+		// document.addEventListener('keydown', preventSpaceScroll)
+
+		// // Clean up event listener when scene is destroyed
+		// this.events.once('destroy', () => {
+		// 	document.removeEventListener('keydown', preventSpaceScroll)
+		// })
 	}
 }

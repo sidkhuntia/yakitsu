@@ -43,7 +43,12 @@
 
 		gtag('config', 'G-DJD5YDN0Q0')
 	</script>
-	<body style="background: #222; margin: 0">
+	<body
+		style="
+			background: linear-gradient(135deg, #2c3e50, #34495e);
+			margin: 0;
+			font-family: 'Jersey 10', monospace;
+		">
 		<style>
 			@font-face {
 				font-family: 'Retro Font';
@@ -59,42 +64,48 @@
 				align-items: center;
 				min-height: 100vh;
 				justify-content: center;
-				background: #222;
+				background: linear-gradient(135deg, #2c3e50, #34495e);
+				padding: 20px;
 			">
 			<button
 				id="fullscreen-btn"
 				style="
-					margin-bottom: 1.2rem;
-					font-size: 1.1rem;
-					padding: 0.5em 1.2em;
-					background: #333;
-					color: #0ff;
-					border: 1px solid #0ff;
-					border-radius: 8px;
+					margin-bottom: 20px;
+					font-size: 14px;
+					padding: 12px 24px;
+					background: #e74c3c;
+					color: #fff;
+					border: 3px solid #c0392b;
+					border-radius: 0;
 					cursor: pointer;
-					box-shadow: 0 2px 12px #0008;
-					transition:
-						background 0.2s,
-						border 0.2s;
+					font-family: 'Jersey 10', monospace;
+					font-weight: bold;
+					text-transform: uppercase;
+					letter-spacing: 1px;
+					box-shadow:
+						0 4px 0 #a93226,
+						0 6px 8px rgba(0, 0, 0, 0.3);
+					transition: all 0.1s ease;
 				">
-				Full Screen
+				⛶ Full Screen
 			</button>
 			<div
 				id="game-container"
 				style="
 					position: relative;
-					padding: 10px;
-					border-radius: 12px;
-					background: linear-gradient(145deg, #1a1a2e, #16213e);
+					padding: 8px;
+					background: #34495e;
+					border: 4px solid #2c3e50;
 					box-shadow:
-						0 0 20px rgba(0, 255, 255, 0.5),
-						0 0 40px rgba(0, 255, 255, 0.2),
-						inset 0 0 10px rgba(0, 0, 0, 0.8);
-					overflow: hidden;
+						inset 0 0 0 2px #5d6d7e,
+						0 8px 16px rgba(0, 0, 0, 0.4);
+					image-rendering: pixelated;
+					image-rendering: -moz-crisp-edges;
+					image-rendering: crisp-edges;
 				">
-				<!-- Scan lines overlay -->
+				<!-- Retro scanline effect -->
 				<div
-					class="scan-lines"
+					class="retro-scanlines"
 					style="
 						position: absolute;
 						top: 0;
@@ -103,79 +114,59 @@
 						bottom: 0;
 						background: repeating-linear-gradient(
 							0deg,
-							rgba(0, 0, 0, 0.15),
-							rgba(0, 0, 0, 0.15) 1px,
-							transparent 1px,
-							transparent 2px
+							transparent,
+							transparent 2px,
+							rgba(0, 0, 0, 0.1) 2px,
+							rgba(0, 0, 0, 0.1) 4px
 						);
 						pointer-events: none;
 						z-index: 10;
-						mix-blend-mode: overlay;
-						opacity: 0.4;
 					"></div>
 
-				<!-- CRT flicker effect -->
+				<!-- Pixel art corners -->
 				<div
-					class="crt-flicker"
+					class="pixel-corner top-left"
 					style="
 						position: absolute;
-						top: 0;
-						left: 0;
-						right: 0;
-						bottom: 0;
-						pointer-events: none;
-						z-index: 11;
-						mix-blend-mode: soft-light;
-						opacity: 0.3;
-					"></div>
-
-				<div
-					class="corner top-left"
-					style="
-						position: absolute;
-						top: 0;
-						left: 0;
-						width: 40px;
-						height: 40px;
-						border-top: 4px solid #0ff;
-						border-left: 4px solid #0ff;
-						border-top-left-radius: 8px;
+						top: -4px;
+						left: -4px;
+						width: 16px;
+						height: 16px;
+						background: #f39c12;
+						border: 2px solid #e67e22;
 					"></div>
 				<div
-					class="corner top-right"
+					class="pixel-corner top-right"
 					style="
 						position: absolute;
-						top: 0;
-						right: 0;
-						width: 40px;
-						height: 40px;
-						border-top: 4px solid #0ff;
-						border-right: 4px solid #0ff;
-						border-top-right-radius: 8px;
+						top: -4px;
+						right: -4px;
+						width: 16px;
+						height: 16px;
+						background: #f39c12;
+						border: 2px solid #e67e22;
 					"></div>
 				<div
-					class="corner bottom-left"
+					class="pixel-corner bottom-left"
 					style="
 						position: absolute;
-						bottom: 0;
-						left: 0;
-						width: 40px;
-						height: 40px;
-						border-bottom: 4px solid #0ff;
-						border-left: 4px solid #0ff;
-						border-bottom-left-radius: 8px;
+						bottom: -4px;
+						left: -4px;
+						width: 16px;
+						height: 16px;
+						background: #f39c12;
+						border: 2px solid #e67e22;
 					"></div>
 				<div
-					class="corner bottom-right"
+					class="pixel-corner bottom-right"
 					style="
 						position: absolute;
-						bottom: 0;
-						right: 0;
-						width: 40px;
-						height: 40px;
-						border-bottom: 4px solid #0ff;
-						border-right: 4px solid #0ff;
-						border-bottom-right-radius: 8px;
+						bottom: -4px;
+						right: -4px;
+						width: 16px;
+						height: 16px;
+						background: #f39c12;
+						border: 2px solid #e67e22;
 					"></div>
 				<div id="app" width="1280" height="720"></div>
 			</div>
@@ -183,174 +174,174 @@
 				id="game-info"
 				style="
 					max-width: 600px;
-					color: #fff;
-					margin-top: 2.2rem;
+					color: #ecf0f1;
+					margin-top: 24px;
 					text-align: center;
-					font-size: 1.13rem;
-					font-family:
-						'Inter', 'Avenir', 'Segoe UI', Arial, sans-serif;
-					background: rgba(30, 30, 40, 0.55);
-					border-radius: 18px;
-					padding: 1.6rem 2.2rem 1.6rem 2.2rem;
+					font-size: 16px;
+					font-family: 'Jersey 10', monospace;
+					background: #2c3e50;
+					border: 3px solid #34495e;
+					padding: 20px 24px;
 					box-shadow:
-						0 4px 32px #000a,
-						0 0 0 2px #0ff4;
-					backdrop-filter: blur(8px) saturate(1.2);
-					border: 2.5px solid transparent;
-					background-clip: padding-box, border-box;
-					border-image: linear-gradient(120deg, #0ff, #a0f, #0ff 90%)
-						1;
-					animation: borderGlow 3s linear infinite;
+						inset 0 0 0 2px #5d6d7e,
+						0 4px 8px rgba(0, 0, 0, 0.3);
 					position: relative;
 				">
-				<b
+				<div
 					style="
-						font-size: 1.25em;
-						letter-spacing: 0.04em;
-						color: #0ff;
-						text-shadow: 0 2px 8px #0ff4;
-					"
-					>Yakitsku</b
-				>
-				<div style="margin-top: 0.5em">
+						font-size: 24px;
+						font-weight: bold;
+						color: #f39c12;
+						text-shadow: 2px 2px 0 #e67e22;
+						margin-bottom: 12px;
+						text-transform: uppercase;
+						letter-spacing: 2px;
+					">
+					★ Yakitsku ★
+				</div>
+				<div style="margin-bottom: 16px; color: #bdc3c7">
 					Type words to help your avatar kill monsters!
 				</div>
-				<ul
+				<div
 					style="
 						text-align: left;
-						margin: 1.1em 0 0 1.2em;
+						margin: 0;
 						padding: 0;
-						font-size: 1em;
-						line-height: 1.7;
-						color: #eaf6fa;
-						font-family: inherit;
+						font-size: 14px;
+						line-height: 1.8;
+						color: #ecf0f1;
 					">
-					<li>
-						Type the word above the obstacle before your monster
-						kills you.
-					</li>
-					<li>Each correct word increases your score and speed.</li>
-					<li>
-						3 lives. Lose one if you hit an obstacle. Game over at
-						0.
-					</li>
-					<!-- <li>
-            Power-ups: <b style="color: #0ff">ICE</b> (freeze) and
-            <b style="color: #f0f">BOMB</b> (clear obstacle).
-          </li> -->
-					<li>
-						Press <b>ESC</b> for settings. Try for a high score!
-					</li>
-				</ul>
+					<div style="margin: 8px 0">
+						▸ Type words before monsters reach you
+					</div>
+					<div style="margin: 8px 0">
+						▸ Correct words increase score and speed
+					</div>
+					<div style="margin: 8px 0">
+						▸ You have 3 lives - don't let monsters catch you!
+					</div>
+					<div style="margin: 8px 0">
+						▸ Press
+						<span style="color: #f39c12; font-weight: bold"
+							>ESC</span
+						>
+						for settings
+					</div>
+					<div style="margin: 8px 0">▸ Beat your high score!</div>
+				</div>
+
+				<!-- Retro decorative elements -->
+				<div
+					style="
+						position: absolute;
+						top: 8px;
+						left: 8px;
+						width: 8px;
+						height: 8px;
+						background: #e74c3c;
+						border: 1px solid #c0392b;
+					"></div>
+				<div
+					style="
+						position: absolute;
+						top: 8px;
+						right: 8px;
+						width: 8px;
+						height: 8px;
+						background: #27ae60;
+						border: 1px solid #229954;
+					"></div>
+				<div
+					style="
+						position: absolute;
+						bottom: 8px;
+						left: 8px;
+						width: 8px;
+						height: 8px;
+						background: #3498db;
+						border: 1px solid #2980b9;
+					"></div>
+				<div
+					style="
+						position: absolute;
+						bottom: 8px;
+						right: 8px;
+						width: 8px;
+						height: 8px;
+						background: #9b59b6;
+						border: 1px solid #8e44ad;
+					"></div>
 			</div>
 		</div>
 		<style>
-			@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
+			@import url('https://fonts.googleapis.com/css2?family=Jersey+10&display=swap');
 
-			@keyframes borderGlow {
-				0% {
-					box-shadow:
-						0 4px 32px #0ff4,
-						0 0 0 2px #0ff4;
-				}
-				50% {
-					box-shadow:
-						0 4px 32px #a0f4,
-						0 0 0 2px #a0f4;
-				}
-				100% {
-					box-shadow:
-						0 4px 32px #0ff4,
-						0 0 0 2px #0ff4;
-				}
+			#fullscreen-btn:hover {
+				background: #c0392b;
+				transform: translateY(2px);
+				box-shadow:
+					0 2px 0 #a93226,
+					0 4px 6px rgba(0, 0, 0, 0.3);
 			}
 
-			@keyframes crtFlicker {
-				0% {
-					background: rgba(255, 255, 255, 0);
-				}
-				3% {
-					background: rgba(255, 255, 255, 0.02);
-				}
-				6% {
-					background: rgba(255, 255, 255, 0);
-				}
-				7% {
-					background: rgba(255, 255, 255, 0.04);
-				}
-				8% {
-					background: rgba(255, 255, 255, 0);
-				}
-				9% {
-					background: rgba(255, 255, 255, 0.05);
-				}
-				10% {
-					background: rgba(255, 255, 255, 0);
-				}
-				30% {
-					background: rgba(255, 255, 255, 0);
-				}
-				31% {
-					background: rgba(255, 255, 255, 0.03);
-				}
-				32% {
-					background: rgba(255, 255, 255, 0);
-				}
-				55% {
-					background: rgba(255, 255, 255, 0);
-				}
-				56% {
-					background: rgba(255, 255, 255, 0.04);
-				}
-				57% {
-					background: rgba(255, 255, 255, 0);
-				}
-				85% {
-					background: rgba(255, 255, 255, 0);
-				}
-				86% {
-					background: rgba(255, 255, 255, 0.03);
-				}
-				87% {
-					background: rgba(255, 255, 255, 0);
-				}
-				98% {
-					background: rgba(255, 255, 255, 0);
-				}
-				99% {
-					background: rgba(255, 255, 255, 0.04);
-				}
-				100% {
-					background: rgba(255, 255, 255, 0);
-				}
+			#fullscreen-btn:active {
+				transform: translateY(4px);
+				box-shadow:
+					0 0 0 #a93226,
+					0 2px 4px rgba(0, 0, 0, 0.3);
 			}
 
-			.corner {
-				animation: cornerFlash 3s infinite;
+			.pixel-corner {
+				animation: pixelBlink 2s infinite;
 			}
 
-			.top-left {
+			.pixel-corner.top-left {
 				animation-delay: 0s;
 			}
 
-			.top-right {
-				animation-delay: 0.75s;
+			.pixel-corner.top-right {
+				animation-delay: 0.5s;
 			}
 
-			.bottom-left {
+			.pixel-corner.bottom-left {
+				animation-delay: 1s;
+			}
+
+			.pixel-corner.bottom-right {
 				animation-delay: 1.5s;
 			}
 
-			.bottom-right {
-				animation-delay: 2.25s;
+			@keyframes pixelBlink {
+				0%,
+				80% {
+					opacity: 1;
+				}
+				90%,
+				100% {
+					opacity: 0.3;
+				}
 			}
 
 			#game-container {
-				animation: pulseGlow 4s infinite;
+				animation: none;
 			}
 
-			.crt-flicker {
-				animation: crtFlicker 8s infinite;
+			.retro-scanlines {
+				animation: none;
+			}
+
+			/* Remove all cyberpunk effects */
+			@keyframes borderGlow {
+				display: none;
+			}
+			@keyframes crtFlicker {
+				display: none;
+			}
+			@keyframes cornerFlash {
+				display: none;
+			}
+			@keyframes pulseGlow {
+				display: none;
 			}
 		</style>
 		<script type="module" src="/src/main.ts"></script>

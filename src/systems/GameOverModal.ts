@@ -6,6 +6,7 @@ export class GameOverModal extends Phaser.GameObjects.Container {
 	private panel: Phaser.GameObjects.Rectangle
 	private congratsText: Phaser.GameObjects.Text
 	private scoreText: Phaser.GameObjects.Text
+	private statsText: Phaser.GameObjects.Text
 	private retryBtn: Phaser.GameObjects.Text
 	private menuBtn: Phaser.GameObjects.Text
 	private onRestart: () => void
@@ -17,6 +18,8 @@ export class GameOverModal extends Phaser.GameObjects.Container {
 		scene: Phaser.Scene,
 		score: number,
 		bestScore: number,
+		wpm: number,
+		accuracy: number,
 		onRestart: () => void,
 		onMenu: () => void,
 	) {
@@ -32,7 +35,7 @@ export class GameOverModal extends Phaser.GameObjects.Container {
 			.rectangle(width / 2, height / 2, width, height, 0x000000, 0.5)
 			.setInteractive()
 		this.panel = scene.add
-			.rectangle(width / 2, height / 2, 440, 300, 0x222233, 0.98)
+			.rectangle(width / 2, height / 2, 440, 400, 0x222233, 0.98)
 			.setStrokeStyle(2, 0x8888aa)
 
 		let congrats = ''
@@ -44,21 +47,36 @@ export class GameOverModal extends Phaser.GameObjects.Container {
 		this.congratsText = scene.make
 			.text({
 				x: width / 2,
-				y: height / 2 - 80,
+				y: height / 2 - 130,
 				text: congrats,
-				style: { font: '28px Retro Font', color: '#0ff' },
+				style: { font: '24px Retro Font', color: '#0ff' },
 				add: false,
 			})
 			.setOrigin(0.5)
 		this.scoreText = scene.make
 			.text({
 				x: width / 2,
-				y: height / 2 - 20,
+				y: height / 2 - 80,
 				text: `Score: ${score}\nBest: ${bestScore}`,
 				style: {
-					font: '28px Retro Font',
+					font: '24px Retro Font',
 					color: '#fff',
 					align: 'center',
+					lineSpacing: 8,
+				},
+				add: false,
+			})
+			.setOrigin(0.5)
+		this.statsText = scene.make
+			.text({
+				x: width / 2,
+				y: height / 2 - 20,
+				text: `Average WPM: ${wpm}\nAverage Accuracy: ${accuracy}%`,
+				style: {
+					font: '18px Retro Font',
+					color: '#f39c12',
+					align: 'center',
+					lineSpacing: 6,
 				},
 				add: false,
 			})
@@ -69,7 +87,7 @@ export class GameOverModal extends Phaser.GameObjects.Container {
 				y: height / 2 + 50,
 				text: '[ Retry ]',
 				style: {
-					font: '24px Retro Font',
+					font: '20px Retro Font',
 					color: '#0f0',
 					backgroundColor: '#222',
 					padding: { left: 16, right: 16, top: 8, bottom: 8 },
@@ -85,7 +103,7 @@ export class GameOverModal extends Phaser.GameObjects.Container {
 				y: height / 2 + 100,
 				text: '[ Menu ]',
 				style: {
-					font: '24px Retro Font',
+					font: '20px Retro Font',
 					color: '#0ff',
 					backgroundColor: '#222',
 					padding: { left: 16, right: 16, top: 8, bottom: 8 },
@@ -99,6 +117,7 @@ export class GameOverModal extends Phaser.GameObjects.Container {
 			this.panel,
 			this.congratsText,
 			this.scoreText,
+			this.statsText,
 			this.retryBtn,
 			this.menuBtn,
 		])

@@ -1,12 +1,13 @@
 import Phaser from 'phaser'
 import { updateSettings, loadData, saveRun } from './persistence'
+import Play from '../scenes/Play'
 
 export class SettingsModal extends Phaser.GameObjects.Container {
 	private bg: Phaser.GameObjects.Rectangle
 	private panel: Phaser.GameObjects.Rectangle
 	private musicBtn: Phaser.GameObjects.Text
-	private fontBtn: Phaser.GameObjects.Text
 	private lockInputBtn: Phaser.GameObjects.Text
+	private quitBtn: Phaser.GameObjects.Text
 	private clearBtn: Phaser.GameObjects.Text
 	private closeBtn: Phaser.GameObjects.Text
 	private onClose: () => void
@@ -26,7 +27,7 @@ export class SettingsModal extends Phaser.GameObjects.Container {
 		this.panel = scene.add
 			.rectangle(width / 2, height / 2, 400, 320, 0x222233, 0.98)
 			.setStrokeStyle(2, 0x8888aa)
-		const baseY = height / 2 - 60
+		const baseY = height / 2 - 80
 		this.musicBtn = scene.add
 			.text(width / 2, baseY, '', {
 				fontFamily: 'Retro Font',
@@ -37,21 +38,21 @@ export class SettingsModal extends Phaser.GameObjects.Container {
 			})
 			.setOrigin(0.5)
 			.setInteractive()
-		this.fontBtn = scene.add
+		this.lockInputBtn = scene.add
 			.text(width / 2, baseY + 60, '', {
 				fontFamily: 'Retro Font',
-				fontSize: '24px',
+				fontSize: '20px',
 				color: '#fff',
 				backgroundColor: '#333',
 				padding: { left: 12, right: 12, top: 6, bottom: 6 },
 			})
 			.setOrigin(0.5)
 			.setInteractive()
-		this.lockInputBtn = scene.add
-			.text(width / 2, baseY + 120, '', {
+		this.quitBtn = scene.add
+			.text(width / 2, baseY + 120, 'Quit to Menu', {
 				fontFamily: 'Retro Font',
 				fontSize: '20px',
-				color: '#fff',
+				color: '#f39c12',
 				backgroundColor: '#333',
 				padding: { left: 12, right: 12, top: 6, bottom: 6 },
 			})
@@ -81,8 +82,8 @@ export class SettingsModal extends Phaser.GameObjects.Container {
 			this.bg,
 			this.panel,
 			this.musicBtn,
-			this.fontBtn,
 			this.lockInputBtn,
+			this.quitBtn,
 			this.clearBtn,
 			this.closeBtn,
 		])
@@ -104,18 +105,6 @@ export class SettingsModal extends Phaser.GameObjects.Container {
 			this.refresh()
 		})
 
-		this.fontBtn.on('pointerdown', () => {
-			const settings = loadData().settings
-			updateSettings({ dyslexicFont: !settings.dyslexicFont })
-
-			// Play click sound if not muted
-			if (!settings.muted) {
-				this.clickSound.play()
-			}
-
-			this.refresh()
-		})
-
 		this.lockInputBtn.on('pointerdown', () => {
 			const settings = loadData().settings
 			updateSettings({ lockInputOnMistake: !settings.lockInputOnMistake })
@@ -126,6 +115,25 @@ export class SettingsModal extends Phaser.GameObjects.Container {
 			}
 
 			this.refresh()
+		})
+
+		this.quitBtn.on('pointerdown', () => {
+			const settings = loadData().settings
+			// Play click sound if not muted
+			if (!settings.muted) {
+				this.clickSound.play()
+			}
+
+			// Get current score from the Play scene
+			const playScene = this.scene.scene.get('Play') as Play
+			if (playScene && playScene.score !== undefined) {
+				// Save the current score
+				saveRun(playScene.score)
+			}
+
+			// Destroy modal and quit to menu
+			this.destroy()
+			this.scene.scene.start('Menu')
 		})
 
 		this.clearBtn.on('pointerdown', () => {
@@ -165,9 +173,6 @@ export class SettingsModal extends Phaser.GameObjects.Container {
 		const settings = loadData().settings
 		this.musicBtn.setText(
 			settings.muted ? 'Music/SFX: OFF' : 'Music/SFX: ON',
-		)
-		this.fontBtn.setText(
-			settings.dyslexicFont ? 'Dyslexic Font: ON' : 'Dyslexic Font: OFF',
 		)
 		this.lockInputBtn.setText(
 			settings.lockInputOnMistake

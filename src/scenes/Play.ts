@@ -31,12 +31,14 @@ export default class Play extends Phaser.Scene {
 	private avatar!: Phaser.GameObjects.Sprite
 	private monster!: Monster
 	// private groundTiles: Phaser.GameObjects.Image[] = [];
-	private score: number = 0
+	public score: number = 0
 	private combo: number = 0
 	private lives: number = 3
 	private scoreText!: Phaser.GameObjects.Text
 	private comboText!: Phaser.GameObjects.Text
 	private livesText!: Phaser.GameObjects.Text
+	private wpmText!: Phaser.GameObjects.Text
+	private accuracyText!: Phaser.GameObjects.Text
 	private gameOverTriggered = false
 	private easyWords: string[] = []
 	private mediumWords: string[] = []
@@ -67,6 +69,13 @@ export default class Play extends Phaser.Scene {
 	private clickSound!: Phaser.Sound.BaseSound
 	private bgMusic!: Phaser.Sound.BaseSound
 	private settings!: Partial<SaveData['settings']>
+	// Typing statistics
+	private totalKeystrokes = 0
+	private correctKeystrokes = 0
+	private gameStartTime = 0
+	private currentWPM = 0
+	private currentAccuracy = 100
+	private statsUpdateTimer?: Phaser.Time.TimerEvent
 
 	constructor() {
 		super('Play')
@@ -140,6 +149,12 @@ export default class Play extends Phaser.Scene {
 		this.wordsCompleted = 0
 		this.obstacleSpeed = this.baseObstacleSpeed
 		this.difficultyLevel = 1
+		// Reset typing statistics
+		this.totalKeystrokes = 0
+		this.correctKeystrokes = 0
+		this.gameStartTime = this.time.now
+		this.currentWPM = 0
+		this.currentAccuracy = 100
 		// Use THESAURUS from words.js
 		this.easyWords = window.THESAURUS?.three || []
 		this.mediumWords = window.THESAURUS?.small || []
@@ -237,9 +252,14 @@ export default class Play extends Phaser.Scene {
 				return
 			// Only allow a-z or A-Z
 			if (!/^[a-zA-Z]$/.test(event.key)) return
+
+			// Track typing statistics
+			this.totalKeystrokes++
+
 			const ok = this.engine.input(event.key.toUpperCase())
 			this.updateWordDisplay()
 			if (ok) {
+				this.correctKeystrokes++
 				this.flashCaret('#0f0')
 				this.infoText.setText('')
 				// Play hit animation and sound on correct key press
@@ -269,10 +289,21 @@ export default class Play extends Phaser.Scene {
 					})
 				}
 			}
+
+			// Update typing statistics
+			this.updateTypingStats()
 		})
 
 		// Set up the ESC key handler
 		this.input.keyboard!.on('keydown-ESC', this.escKeyHandler)
+
+		// Set up continuous statistics updates
+		this.statsUpdateTimer = this.time.addEvent({
+			delay: 1000, // Update every second
+			callback: this.updateTypingStats,
+			callbackScope: this,
+			loop: true,
+		})
 	}
 
 	createHUD() {
@@ -303,15 +334,41 @@ export default class Play extends Phaser.Scene {
 			})
 			.setOrigin(1, 0)
 			.setDepth(20)
+		// WPM (Words Per Minute) - Changed to bright white with dark outline
+		this.wpmText = this.add
+			.text(this.scale.width - 20, 100, '', {
+				fontFamily: 'Retro Font',
+				fontSize: '18px',
+				color: '#ffffff',
+				stroke: '#000000',
+				strokeThickness: 2,
+			})
+			.setOrigin(1, 0)
+			.setDepth(20)
+		// Accuracy - Changed to bright yellow with dark outline
+		this.accuracyText = this.add
+			.text(this.scale.width - 20, 130, '', {
+				fontFamily: 'Retro Font',
+				fontSize: '18px',
+				color: '#ffff00',
+				stroke: '#000000',
+				strokeThickness: 2,
+			})
+			.setOrigin(1, 0)
+			.setDepth(20)
 	}
 
 	updateHUD() {
 		this.livesText.setText('❤️'.repeat(this.lives))
 		this.scoreText.setText(`Score: ${this.score}`)
 		this.comboText.setText(`Combo: ${this.combo}`)
+		this.wpmText.setText(`WPM: ${this.currentWPM}`)
+		this.accuracyText.setText(`Accuracy: ${this.currentAccuracy}%`)
 		// Reposition on resize
 		this.scoreText.setX(this.scale.width - 20)
 		this.comboText.setX(this.scale.width - 20)
+		this.wpmText.setX(this.scale.width - 20)
+		this.accuracyText.setX(this.scale.width - 20)
 	}
 
 	getNextWord(): string {
@@ -384,6 +441,8 @@ export default class Play extends Phaser.Scene {
 		this.scoreText.setVisible(false)
 		this.comboText.setVisible(false)
 		this.livesText.setVisible(false)
+		this.wpmText.setVisible(false)
+		this.accuracyText.setVisible(false)
 		this.avatar.setVisible(false)
 		// Show modal overlay
 		const bestScore =
@@ -392,6 +451,8 @@ export default class Play extends Phaser.Scene {
 			this,
 			this.score,
 			bestScore,
+			this.currentWPM,
+			this.currentAccuracy,
 			() => {
 				this.scene.restart()
 			},
@@ -403,7 +464,11 @@ export default class Play extends Phaser.Scene {
 		// Fallback: also switch to GameOver scene after 10s if modal not used
 		this.time.delayedCall(2000, () => {
 			if (this.scene.isActive('Play')) {
-				this.scene.start('GameOver', { score: this.score })
+				this.scene.start('GameOver', {
+					score: this.score,
+					wpm: this.currentWPM,
+					accuracy: this.currentAccuracy,
+				})
 			}
 		})
 	}
@@ -712,6 +777,11 @@ export default class Play extends Phaser.Scene {
 		// Stop all sounds
 		this.stopAllSounds()
 
+		// Clean up timers
+		if (this.statsUpdateTimer) {
+			this.statsUpdateTimer.remove()
+		}
+
 		// Remove the ESC key handler
 		this.input.keyboard?.off('keydown-ESC', this.escKeyHandler)
 	}
@@ -898,5 +968,30 @@ export default class Play extends Phaser.Scene {
 
 		// Set higher depth to ensure modal appears above all game elements
 		modal.setDepth(100)
+	}
+
+	// Add method to update typing statistics
+	updateTypingStats() {
+		// Calculate time elapsed in minutes
+		const timeElapsed = (this.time.now - this.gameStartTime) / 60000 // Convert to minutes
+
+		// Calculate WPM (assuming average word length of 5 characters)
+		if (timeElapsed > 0) {
+			this.currentWPM = Math.round(
+				this.correctKeystrokes / 5 / timeElapsed,
+			)
+		}
+
+		// Calculate accuracy - continuous calculation
+		if (this.totalKeystrokes > 0) {
+			this.currentAccuracy = Math.round(
+				(this.correctKeystrokes / this.totalKeystrokes) * 100,
+			)
+		} else if (timeElapsed > 0.05) {
+			// After 3 seconds, start showing 0% if no input
+			this.currentAccuracy = 0
+		}
+
+		this.updateHUD()
 	}
 }

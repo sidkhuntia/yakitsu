@@ -28,6 +28,10 @@ window.addEventListener('DOMContentLoaded', () => {
 	const btn = document.getElementById('fullscreen-btn')
 	const getCanvas = () =>
 		document.querySelector('#app canvas') as HTMLCanvasElement | null
+	const setFullscreenLabel = (text: string) => {
+		const label = btn?.querySelector('.fullscreen-label')
+		if (label) label.textContent = text
+	}
 
 	if (btn) {
 		btn.addEventListener('click', async () => {
@@ -36,11 +40,11 @@ window.addEventListener('DOMContentLoaded', () => {
 			if (!document.fullscreenElement) {
 				await canvas.requestFullscreen()
 				canvas.classList.add('fullscreen-canvas')
-				btn.textContent = 'Exit Full Screen'
+				setFullscreenLabel('Exit Fullscreen')
 			} else {
 				await document.exitFullscreen()
 				canvas.classList.remove('fullscreen-canvas')
-				btn.textContent = 'Full Screen'
+				setFullscreenLabel('Fullscreen')
 			}
 		})
 	}
@@ -50,10 +54,10 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (!canvas) return
 		if (!document.fullscreenElement) {
 			canvas.classList.remove('fullscreen-canvas')
-			if (btn) btn.textContent = 'Full Screen'
+			setFullscreenLabel('Fullscreen')
 		} else {
 			canvas.classList.add('fullscreen-canvas')
-			if (btn) btn.textContent = 'Exit Full Screen'
+			setFullscreenLabel('Exit Fullscreen')
 		}
 	})
 
@@ -88,6 +92,11 @@ window.addEventListener('DOMContentLoaded', () => {
 
 	// Listen for return to menu event
 	window.addEventListener('returnToMenu', () => {
+		// Exit fullscreen first so landing screen is visible
+		if (document.fullscreenElement) {
+			document.exitFullscreen().catch(() => {})
+		}
+
 		// Stop all active game scenes
 		const playScene = game.scene.getScene('Play')
 		const gameOverScene = game.scene.getScene('GameOver')

@@ -454,6 +454,12 @@
 				box-shadow: 0 4px 12px rgba(30, 58, 138, 0.4);
 			}
 
+			.control-btn .fullscreen-icon {
+				display: inline-block;
+				vertical-align: middle;
+				margin-right: 6px;
+			}
+
 			.control-btn.primary {
 				background: #1976d2;
 				border-color: #1976d2;
@@ -569,7 +575,17 @@
 						← Back to Menu
 					</button>
 					<button class="control-btn primary" id="fullscreen-btn">
-						⛶ Fullscreen
+						<svg
+							class="fullscreen-icon"
+							viewBox="0 0 24 24"
+							width="18"
+							height="18"
+							fill="currentColor"
+							aria-hidden="true">
+							<path
+								d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
+						</svg>
+						<span class="fullscreen-label">Fullscreen</span>
 					</button>
 				</div>
 			</div>
@@ -884,6 +900,12 @@
 				// Fullscreen functionality
 				const getCanvas = () => document.querySelector('#app canvas')
 
+				const setFullscreenLabel = (text) => {
+					const label =
+						fullscreenBtn?.querySelector('.fullscreen-label')
+					if (label) label.textContent = text
+				}
+
 				if (fullscreenBtn) {
 					fullscreenBtn.addEventListener('click', async () => {
 						const canvas = getCanvas()
@@ -893,11 +915,11 @@
 							if (!document.fullscreenElement) {
 								await canvas.requestFullscreen()
 								canvas.classList.add('fullscreen-canvas')
-								fullscreenBtn.textContent = '⛶ Exit Fullscreen'
+								setFullscreenLabel('Exit Fullscreen')
 							} else {
 								await document.exitFullscreen()
 								canvas.classList.remove('fullscreen-canvas')
-								fullscreenBtn.textContent = '⛶ Fullscreen'
+								setFullscreenLabel('Fullscreen')
 							}
 						} catch (err) {
 							console.error('Fullscreen error:', err)
@@ -912,12 +934,10 @@
 
 					if (!document.fullscreenElement) {
 						canvas.classList.remove('fullscreen-canvas')
-						if (fullscreenBtn)
-							fullscreenBtn.textContent = '⛶ Fullscreen'
+						setFullscreenLabel('Fullscreen')
 					} else {
 						canvas.classList.add('fullscreen-canvas')
-						if (fullscreenBtn)
-							fullscreenBtn.textContent = '⛶ Exit Fullscreen'
+						setFullscreenLabel('Exit Fullscreen')
 					}
 				})
 

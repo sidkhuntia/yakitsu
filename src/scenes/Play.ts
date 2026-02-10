@@ -463,9 +463,33 @@ export default class Play extends Phaser.Scene {
 		if (this.lives <= 0) {
 			this.triggerGameOver()
 		} else {
+			// New word on collision – don't continue from remaining letters
+			const nextWord = this.getNextWord()
+			this.engine.reset(nextWord)
+			this.mistakesThisWord = 0
+			this.updateWordDisplay()
+			this.playNewWordAnimation()
 			// Reset monster by spawning a new one
 			this.spawnNewMonster()
 		}
+	}
+
+	playNewWordAnimation() {
+		const targets = [this.typedText, this.caretText, this.remainingText]
+		targets.forEach((t) => t.setScale(1.15))
+		this.tweens.add({
+			targets,
+			scale: 1,
+			duration: 250,
+			ease: 'Back.easeOut',
+		})
+		this.tweens.add({
+			targets: this.infoText,
+			alpha: 0,
+			duration: 800,
+			delay: 200,
+			onComplete: () => this.infoText.setText(''),
+		})
 	}
 
 	triggerGameOver() {

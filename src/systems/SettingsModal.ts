@@ -1,5 +1,5 @@
 import Phaser from 'phaser'
-import { updateSettings, loadData, saveRun } from './persistence'
+import { updateSettings, loadData, clearHighscores } from './persistence'
 
 export class SettingsModal extends Phaser.GameObjects.Container {
 	private bg: Phaser.GameObjects.Rectangle
@@ -105,8 +105,7 @@ export class SettingsModal extends Phaser.GameObjects.Container {
 		})
 
 		this.clearBtn.on('pointerdown', () => {
-			localStorage.removeItem('yatiksu-save-v1')
-			saveRun(0)
+			clearHighscores()
 
 			// Play click sound if not muted
 			const settings = loadData().settings

@@ -53,6 +53,7 @@ export default class Play extends Phaser.Scene {
 	private inputLocked = false
 	private obstacleSpeed = 2
 	private baseObstacleSpeed = 2
+	private initialBaseSpeed = 2
 	private difficultyLevel = 1
 	private wordTierOffset = 0
 	private settingsModalOpen = false
@@ -77,6 +78,13 @@ export default class Play extends Phaser.Scene {
 	private currentWPM = 0
 	private currentAccuracy = 100
 	private statsUpdateTimer?: Phaser.Time.TimerEvent
+	// Perfect word bonus: track mistakes per word
+	private mistakesThisWord = 0
+	private maxComboThisRun = 0
+	// Danger zone: monster within ~200px of avatar
+	private dangerZoneThreshold = 200
+	private dangerBorder?: Phaser.GameObjects.Rectangle
+	private dangerPulseTween?: Phaser.Tweens.Tween
 
 	constructor() {
 		super('Play')
@@ -151,8 +159,9 @@ export default class Play extends Phaser.Scene {
 			hard: 3,
 			'i-am-god': 5,
 		}
-		this.baseObstacleSpeed =
+		this.initialBaseSpeed =
 			difficultySpeeds[difficulty || 'medium'] ?? difficultySpeeds.medium
+		this.baseObstacleSpeed = this.initialBaseSpeed
 
 		// Word tier offset: easy=10(small), medium=20(medium), hard=40(big), god=60(large)
 		const wordTierOffsets: Record<string, number> = {
@@ -169,6 +178,7 @@ export default class Play extends Phaser.Scene {
 		this.lives = 3
 		this.gameOverTriggered = false
 		this.wordsCompleted = 0
+		this.mistakesThisWord = 0
 		this.obstacleSpeed = this.baseObstacleSpeed
 		this.difficultyLevel = 1
 		// Reset typing statistics
@@ -295,6 +305,7 @@ export default class Play extends Phaser.Scene {
 					this.handleWordComplete()
 				}
 			} else {
+				this.mistakesThisWord++
 				this.flashCaret('#f44')
 				this.combo = 0
 				this.updateHUD()
@@ -408,11 +419,20 @@ export default class Play extends Phaser.Scene {
 
 	handleWordComplete() {
 		const base = 10 * this.engine.getWord().length
-		const bonus = 1 + Math.floor(this.combo / 20) * 0.25
-		this.score += Math.floor(base * bonus)
+		const comboBonus = 1 + Math.floor(this.combo / 20) * 0.25
+		let earned = Math.floor(base * comboBonus)
+		// Perfect word bonus: +50% if no mistakes on this word
+		if (this.mistakesThisWord === 0) {
+			earned = Math.floor(earned * 1.5)
+			this.infoText.setText('Perfect! +50%')
+		} else {
+			this.infoText.setText('Word complete!')
+		}
+		this.score += earned
 		this.combo++
+		this.maxComboThisRun = Math.max(this.maxComboThisRun, this.combo)
 		this.wordsCompleted++
-		this.infoText.setText('Word complete!')
+		this.mistakesThisWord = 0
 		this.updateHUD()
 		// this.spawnPowerUp()
 
@@ -436,6 +456,9 @@ export default class Play extends Phaser.Scene {
 		if (this.gameOverTriggered) return
 		this.lives--
 		this.combo = 0
+		// Screen shake and red flash on damage
+		this.cameras.main.shake(200, 0.01)
+		this.cameras.main.flash(150, 255, 0, 0, false)
 		this.updateHUD()
 		if (this.lives <= 0) {
 			this.triggerGameOver()
@@ -451,9 +474,15 @@ export default class Play extends Phaser.Scene {
 		// Stop all sounds
 		this.stopAllSounds()
 
-		// Save best score before showing game over modal
+		// Save run stats (score, WPM, accuracy, words, combo)
 		if (typeof saveRun === 'function') {
-			saveRun(this.score)
+			saveRun({
+				score: this.score,
+				wpm: this.currentWPM,
+				accuracy: this.currentAccuracy,
+				wordsCompleted: this.wordsCompleted,
+				maxCombo: this.maxComboThisRun,
+			})
 		}
 
 		// Hide all main game text objects to prevent overlap with modal
@@ -467,15 +496,20 @@ export default class Play extends Phaser.Scene {
 		this.wpmText.setVisible(false)
 		this.accuracyText.setVisible(false)
 		this.avatar.setVisible(false)
+		if (this.dangerBorder) this.dangerBorder.setVisible(false)
+		this.dangerPulseTween?.stop()
 		// Show modal overlay
-		const bestScore =
-			typeof loadData === 'function' ? loadData().bestScore : 0
+		const saveData = typeof loadData === 'function' ? loadData() : null
+		const bestScore = saveData?.bestScore ?? 0
 		const modal = new GameOverModal(
 			this,
 			this.score,
 			bestScore,
 			this.currentWPM,
 			this.currentAccuracy,
+			saveData?.bestWPM ?? 0,
+			saveData?.bestAccuracy ?? 0,
+			saveData?.longestCombo ?? 0,
 			() => {
 				this.scene.restart()
 			},
@@ -578,6 +612,14 @@ export default class Play extends Phaser.Scene {
 			})
 			.setOrigin(0.5)
 			.setDepth(20)
+
+		// Danger zone border (hidden by default, shown when monster is close)
+		this.dangerBorder = this.add
+			.rectangle(width / 2, height / 2 - 20, 400, 60, 0xff0000, 0)
+			.setOrigin(0.5)
+			.setDepth(19)
+			.setStrokeStyle(3, 0xff0000)
+			.setVisible(false)
 	}
 
 	update() {
@@ -635,6 +677,49 @@ export default class Play extends Phaser.Scene {
 					this,
 				)
 			}
+
+			// Danger zone: monster within threshold of avatar (avatar x ≈ 120)
+			if (this.monster) {
+				const distanceToAvatar = this.monster.x - 120
+				const inDangerZone =
+					distanceToAvatar < this.dangerZoneThreshold &&
+					distanceToAvatar > 0
+				this.updateDangerZone(inDangerZone)
+			} else {
+				this.updateDangerZone(false)
+			}
+		}
+	}
+
+	updateDangerZone(inDanger: boolean) {
+		if (
+			!this.dangerBorder ||
+			this.gameOverTriggered ||
+			this.settingsModalOpen
+		)
+			return
+		if (inDanger) {
+			this.dangerBorder.setVisible(true)
+			this.typedText.setColor('#ff6666')
+			this.caretText.setColor('#ff4444')
+			this.remainingText.setColor('#ff8888')
+			if (!this.dangerPulseTween?.isPlaying()) {
+				this.dangerPulseTween = this.tweens.add({
+					targets: this.dangerBorder,
+					alpha: 0.35,
+					duration: 200,
+					yoyo: true,
+					repeat: -1,
+				})
+			}
+		} else {
+			this.dangerBorder.setVisible(false)
+			this.dangerPulseTween?.stop()
+			this.dangerPulseTween = undefined
+			this.dangerBorder.setAlpha(0)
+			this.typedText.setColor('#0f0')
+			this.caretText.setColor('#ff0')
+			this.remainingText.setColor('#fff')
 		}
 	}
 
@@ -882,22 +967,18 @@ export default class Play extends Phaser.Scene {
 		}
 	}
 
-	// Add a new method to increase difficulty
+	// Add a new method to increase difficulty (logarithmic curve)
 	increaseDifficulty() {
 		this.difficultyLevel++
 
-		// Cap the max speed increase at 100% faster than base speed
+		// Logarithmic curve: fast initial ramp, then plateaus (fairer than linear)
+		const logMultiplier = 1 + 0.3 * Math.log(this.difficultyLevel + 1)
 		const maxSpeedMultiplier = 2.0
-		const speedIncrease = Math.min(
-			0.1 * this.difficultyLevel,
-			maxSpeedMultiplier,
-		)
+		const speedMultiplier = Math.min(logMultiplier, maxSpeedMultiplier)
 
-		this.baseObstacleSpeed =
-			this.baseObstacleSpeed * (1 + speedIncrease * 0.1)
+		this.baseObstacleSpeed = this.initialBaseSpeed * speedMultiplier
 		this.obstacleSpeed = this.baseObstacleSpeed
 
-		// Play speed up sound on mistake
 		if (!this.settings.muted) {
 			this.speedUpSound.play()
 		}

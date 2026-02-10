@@ -58,7 +58,13 @@ window.addEventListener('DOMContentLoaded', () => {
 	})
 
 	// Listen for start game event from HTML
-	window.addEventListener('startGame', () => {
+	window.addEventListener('startGame', (e: Event) => {
+		const detail = (e as CustomEvent<{ difficulty?: string }>).detail
+		const difficulty = detail?.difficulty || 'medium'
+
+		// Pass difficulty to Play scene
+		game.registry.set('difficulty', difficulty)
+
 		// Always restart the Play scene to ensure clean state
 		const playScene = game.scene.getScene('Play')
 		if (playScene && playScene.scene.isActive()) {

@@ -54,6 +54,7 @@ export default class Play extends Phaser.Scene {
 	private obstacleSpeed = 2
 	private baseObstacleSpeed = 2
 	private difficultyLevel = 1
+	private wordTierOffset = 0
 	private settingsModalOpen = false
 	private backgroundLayers: Phaser.GameObjects.TileSprite[] = []
 	private groundLayers: Phaser.GameObjects.TileSprite[] = []
@@ -142,6 +143,27 @@ export default class Play extends Phaser.Scene {
 	}
 
 	create() {
+		// Apply difficulty from registry (set before game start)
+		const difficulty = this.registry.get('difficulty') as string | undefined
+		const difficultySpeeds: Record<string, number> = {
+			easy: 1.2,
+			medium: 2,
+			hard: 3,
+			'i-am-god': 5,
+		}
+		this.baseObstacleSpeed =
+			difficultySpeeds[difficulty || 'medium'] ?? difficultySpeeds.medium
+
+		// Word tier offset: easy=10(small), medium=20(medium), hard=40(big), god=60(large)
+		const wordTierOffsets: Record<string, number> = {
+			easy: 10,
+			medium: 20,
+			hard: 40,
+			'i-am-god': 60,
+		}
+		this.wordTierOffset =
+			wordTierOffsets[difficulty || 'medium'] ?? wordTierOffsets.medium
+
 		this.score = 0
 		this.combo = 0
 		this.lives = 3
@@ -373,7 +395,8 @@ export default class Play extends Phaser.Scene {
 
 	getNextWord(): string {
 		// Level progression: 0-9: three, 10-19: small, 20-39: medium, 40-59: big, 60+: large
-		const w = this.wordsCompleted
+		// wordTierOffset shifts start based on difficulty (easy=0, medium=10, hard=20, god=60)
+		const w = this.wordsCompleted + this.wordTierOffset
 		if (w < 10 && this.easyWords.length) return getRandom(this.easyWords)
 		if (w < 20 && this.mediumWords.length)
 			return getRandom(this.mediumWords)

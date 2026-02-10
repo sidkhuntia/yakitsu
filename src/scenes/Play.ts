@@ -507,6 +507,7 @@ export default class Play extends Phaser.Scene {
 			bestScore,
 			this.currentWPM,
 			this.currentAccuracy,
+			this.maxComboThisRun,
 			saveData?.bestWPM ?? 0,
 			saveData?.bestAccuracy ?? 0,
 			saveData?.longestCombo ?? 0,

@@ -5,7 +5,6 @@ export class GameOverModal extends Phaser.GameObjects.Container {
 	private bg: Phaser.GameObjects.Rectangle
 	private panel: Phaser.GameObjects.Rectangle
 	private scoreText: Phaser.GameObjects.Text
-	private statsText: Phaser.GameObjects.Text
 	private retryBtn: Phaser.GameObjects.Text
 	private menuBtn: Phaser.GameObjects.Text
 	private onRetry: () => void
@@ -21,6 +20,7 @@ export class GameOverModal extends Phaser.GameObjects.Container {
 		bestScore: number,
 		wpm: number,
 		accuracy: number,
+		thisRunCombo: number,
 		bestWPM: number,
 		bestAccuracy: number,
 		longestCombo: number,
@@ -35,69 +35,166 @@ export class GameOverModal extends Phaser.GameObjects.Container {
 		// Add click sound
 		this.clickSound = scene.sound.add('clickSound', { volume: 0.7 })
 
+		const cx = width / 2
+		const cy = height / 2
+
 		this.bg = scene.add
-			.rectangle(width / 2, height / 2, width, height, 0x000000, 0.7)
+			.rectangle(cx, cy, width, height, 0x000000, 0.7)
 			.setInteractive()
+
+		// MonkeyType-style: compact stats grid, larger panel for breathing room
+		const panelWidth = 480
+		const panelHeight = 420
 		this.panel = scene.add
-			.rectangle(width / 2, height / 2, 500, 450, 0x0f1419, 0.98)
+			.rectangle(cx, cy, panelWidth, panelHeight, 0x0f1419, 0.98)
 			.setStrokeStyle(3, 0x00e676)
 
-		// Game Over title
-		let titleText = 'Game Over'
+		// Title
+		let titleStr = 'Game Over'
 		if (score >= bestScore && score > 0) {
-			titleText = 'New Best! Game Over'
+			titleStr = 'New Best!'
 		}
 		this.titleText = scene.add
-			.text(width / 2, height / 2 - 140, titleText, {
+			.text(cx, cy - panelHeight / 2 + 45, titleStr, {
 				fontFamily: 'Retro Font',
-				fontSize: '36px',
+				fontSize: '32px',
 				color: '#ff5722',
 			})
 			.setOrigin(0.5)
 
-		// Score display
+		// Score row (MonkeyType-style: big numbers)
 		this.scoreText = scene.add
-			.text(width / 2, height / 2 - 90, `Final Score: ${score}`, {
+			.text(cx - 60, cy - panelHeight / 2 + 95, `${score}`, {
 				fontFamily: 'Retro Font',
-				fontSize: '24px',
+				fontSize: '28px',
 				color: '#e1f5fe',
 			})
 			.setOrigin(0.5)
 
-		// Best score display
 		this.bestText = scene.add
-			.text(width / 2, height / 2 - 60, `Best Score: ${bestScore}`, {
+			.text(cx + 60, cy - panelHeight / 2 + 95, `${bestScore}`, {
 				fontFamily: 'Retro Font',
-				fontSize: '20px',
+				fontSize: '28px',
 				color: '#64ffda',
 			})
 			.setOrigin(0.5)
 
-		// Stats display: this run + personal bests
-		const statsLines = [`This run: WPM ${wpm} | Accuracy ${accuracy}%`]
+		// Stats grid (MonkeyType-style: label above value)
+		const statStyle = { fontFamily: 'Retro Font', fontSize: '16px' }
+		const statLabelStyle = {
+			fontFamily: 'Retro Font',
+			fontSize: '12px',
+			color: '#78909c',
+		}
+		const statY = cy - 30
+		const statSpacing = 100
+
+		// This run stats - add to container
+		const statEls: Phaser.GameObjects.GameObject[] = []
+		statEls.push(
+			scene.add
+				.text(cx - statSpacing, statY - 18, 'wpm', statLabelStyle)
+				.setOrigin(0.5),
+		)
+		statEls.push(
+			scene.add
+				.text(cx - statSpacing, statY, `${wpm}`, {
+					...statStyle,
+					color: '#00e676',
+				})
+				.setOrigin(0.5),
+		)
+		statEls.push(
+			scene.add
+				.text(cx, statY - 18, 'acc', statLabelStyle)
+				.setOrigin(0.5),
+		)
+		statEls.push(
+			scene.add
+				.text(cx, statY, `${accuracy}%`, {
+					...statStyle,
+					color: '#00e676',
+				})
+				.setOrigin(0.5),
+		)
+		statEls.push(
+			scene.add
+				.text(cx + statSpacing, statY - 18, 'combo', statLabelStyle)
+				.setOrigin(0.5),
+		)
+		statEls.push(
+			scene.add
+				.text(cx + statSpacing, statY, `${thisRunCombo}`, {
+					...statStyle,
+					color: '#00e676',
+				})
+				.setOrigin(0.5),
+		)
+
+		// Personal bests (only if we have any)
 		if (bestWPM > 0 || bestAccuracy > 0 || longestCombo > 0) {
-			statsLines.push(
-				`Best WPM: ${bestWPM} | Best Acc: ${bestAccuracy}% | Longest Combo: ${longestCombo}`,
+			const pbY = statY + 55
+			statEls.push(
+				scene.add
+					.text(cx, pbY - 32, 'personal bests', {
+						fontFamily: 'Retro Font',
+						fontSize: '12px',
+						color: '#78909c',
+					})
+					.setOrigin(0.5),
+			)
+			statEls.push(
+				scene.add
+					.text(cx - statSpacing, pbY - 8, 'wpm', statLabelStyle)
+					.setOrigin(0.5),
+			)
+			statEls.push(
+				scene.add
+					.text(cx - statSpacing, pbY + 10, `${bestWPM}`, {
+						...statStyle,
+						color: '#64ffda',
+					})
+					.setOrigin(0.5),
+			)
+			statEls.push(
+				scene.add
+					.text(cx, pbY - 8, 'acc', statLabelStyle)
+					.setOrigin(0.5),
+			)
+			statEls.push(
+				scene.add
+					.text(cx, pbY + 10, `${bestAccuracy}%`, {
+						...statStyle,
+						color: '#64ffda',
+					})
+					.setOrigin(0.5),
+			)
+			statEls.push(
+				scene.add
+					.text(cx + statSpacing, pbY - 8, 'combo', statLabelStyle)
+					.setOrigin(0.5),
+			)
+			statEls.push(
+				scene.add
+					.text(cx + statSpacing, pbY + 10, `${longestCombo}`, {
+						...statStyle,
+						color: '#64ffda',
+					})
+					.setOrigin(0.5),
 			)
 		}
-		this.statsText = scene.add
-			.text(width / 2, height / 2 + 10, statsLines.join('\n'), {
-				fontFamily: 'Retro Font',
-				fontSize: '18px',
-				color: '#00e676',
-			})
-			.setOrigin(0.5)
 
+		// Buttons with clear spacing
 		this.retryBtn = scene.make
 			.text({
-				x: width / 2,
-				y: height / 2 + 80,
+				x: cx,
+				y: cy + panelHeight / 2 - 100,
 				text: '[ Try Again ]',
 				style: {
-					font: '24px Retro Font',
+					font: '22px Retro Font',
 					color: '#e1f5fe',
 					backgroundColor: '#1976d2',
-					padding: { left: 16, right: 16, top: 8, bottom: 8 },
+					padding: { left: 14, right: 14, top: 6, bottom: 6 },
 				},
 				add: false,
 			})
@@ -106,19 +203,35 @@ export class GameOverModal extends Phaser.GameObjects.Container {
 
 		this.menuBtn = scene.make
 			.text({
-				x: width / 2,
-				y: height / 2 + 130,
+				x: cx,
+				y: cy + panelHeight / 2 - 55,
 				text: '[ Menu ]',
 				style: {
 					font: '20px Retro Font',
 					color: '#e1f5fe',
 					backgroundColor: '#2e7d32',
-					padding: { left: 16, right: 16, top: 8, bottom: 8 },
+					padding: { left: 14, right: 14, top: 6, bottom: 6 },
 				},
 				add: false,
 			})
 			.setOrigin(0.5)
 			.setInteractive({ useHandCursor: true })
+
+		// Add score labels (created with scene.add, need to be in container)
+		const scoreLabelLeft = scene.add
+			.text(cx - 60, cy - panelHeight / 2 + 125, 'score', {
+				fontFamily: 'Retro Font',
+				fontSize: '14px',
+				color: '#78909c',
+			})
+			.setOrigin(0.5)
+		const scoreLabelRight = scene.add
+			.text(cx + 60, cy - panelHeight / 2 + 125, 'best', {
+				fontFamily: 'Retro Font',
+				fontSize: '14px',
+				color: '#78909c',
+			})
+			.setOrigin(0.5)
 
 		this.add([
 			this.bg,
@@ -126,7 +239,9 @@ export class GameOverModal extends Phaser.GameObjects.Container {
 			this.titleText,
 			this.scoreText,
 			this.bestText,
-			this.statsText,
+			scoreLabelLeft,
+			scoreLabelRight,
+			...statEls,
 			this.retryBtn,
 			this.menuBtn,
 		])

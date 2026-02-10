@@ -486,15 +486,16 @@ export default class Play extends Phaser.Scene {
 		)
 		this.children.add(modal)
 		// Fallback: also switch to GameOver scene after 10s if modal not used
-		this.time.delayedCall(2000, () => {
-			if (this.scene.isActive('Play')) {
-				this.scene.start('GameOver', {
-					score: this.score,
-					wpm: this.currentWPM,
-					accuracy: this.currentAccuracy,
-				})
-			}
-		})
+		// DISABLED: Using overlay modal only; GameOver scene kept for potential future use
+		// this.time.delayedCall(2000, () => {
+		// 	if (this.scene.isActive('Play')) {
+		// 		this.scene.start('GameOver', {
+		// 			score: this.score,
+		// 			wpm: this.currentWPM,
+		// 			accuracy: this.currentAccuracy,
+		// 		})
+		// 	}
+		// })
 	}
 
 	createSprites() {

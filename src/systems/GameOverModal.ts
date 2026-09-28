@@ -1,294 +1,291 @@
 import Phaser from 'phaser'
 import { loadData } from './persistence'
+import type { DifficultyProfile } from './tuning'
 
+export interface GameOverSummary {
+	score: number
+	wpm: number
+	accuracy: number
+	combo: number
+	words: number
+	level: number
+	durationSec: number
+	isRecord: boolean
+	difficulty: DifficultyProfile
+	personalBests: {
+		score: number
+		wpm: number
+		accuracy: number
+		combo: number
+	}
+	retry: () => void
+	menu: () => void
+}
+
+function fmtDuration(sec: number): string {
+	const s = Math.floor(sec)
+	return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
+}
+
+/**
+ * End-of-run results.
+ *
+ * Shows the run against the personal best for the difficulty that was just
+ * played, which is the comparison a player actually cares about.
+ */
 export class GameOverModal extends Phaser.GameObjects.Container {
-	private bg: Phaser.GameObjects.Rectangle
-	private panel: Phaser.GameObjects.Rectangle
-	private scoreText: Phaser.GameObjects.Text
-	private retryBtn: Phaser.GameObjects.Text
-	private menuBtn: Phaser.GameObjects.Text
-	private onRetry: () => void
-	private onMenu: () => void
-	private escKeyHandler?: () => void
-	private clickSound: Phaser.Sound.BaseSound
-	private titleText: Phaser.GameObjects.Text
-	private bestText: Phaser.GameObjects.Text
+	private readonly onRetry: () => void
+	private readonly onMenu: () => void
+	private readonly escHandler: () => void
+	private readonly enterHandler: () => void
+	private clickSound?: Phaser.Sound.BaseSound
 
-	constructor(
-		scene: Phaser.Scene,
-		score: number,
-		bestScore: number,
-		wpm: number,
-		accuracy: number,
-		thisRunCombo: number,
-		bestWPM: number,
-		bestAccuracy: number,
-		longestCombo: number,
-		onRetry: () => void,
-		onMenu: () => void,
-	) {
+	constructor(scene: Phaser.Scene, summary: GameOverSummary) {
 		super(scene)
-		this.onRetry = onRetry
-		this.onMenu = onMenu
+		this.onRetry = summary.retry
+		this.onMenu = summary.menu
+
 		const { width, height } = scene.scale
-
-		// Add click sound
-		this.clickSound = scene.sound.add('clickSound', { volume: 0.7 })
-
 		const cx = width / 2
 		const cy = height / 2
+		const accent = summary.difficulty.color
+		const hex = `#${accent.toString(16).padStart(6, '0')}`
 
-		this.bg = scene.add
-			.rectangle(cx, cy, width, height, 0x000000, 0.7)
+		this.clickSound = scene.cache.audio.exists('clickSound')
+			? scene.sound.add('clickSound', { volume: 0.5 })
+			: undefined
+
+		const dim = scene.add
+			.rectangle(cx, cy, width, height, 0x05080d, 0.86)
 			.setInteractive()
 
-		// MonkeyType-style: compact stats grid, larger panel for breathing room
-		const panelWidth = 480
-		const panelHeight = 420
-		this.panel = scene.add
-			.rectangle(cx, cy, panelWidth, panelHeight, 0x0f1419, 0.98)
-			.setStrokeStyle(3, 0x00e676)
+		const panelW = 560
+		const panelH = 470
+		const panel = scene.add
+			.rectangle(cx, cy, panelW, panelH, 0x0b1018, 0.98)
+			.setStrokeStyle(3, accent)
 
-		// Title
-		let titleStr = 'Game Over'
-		if (score >= bestScore && score > 0) {
-			titleStr = 'New Best!'
-		}
-		this.titleText = scene.add
-			.text(cx, cy - panelHeight / 2 + 45, titleStr, {
+		const title = scene.add
+			.text(
+				cx,
+				cy - panelH / 2 + 44,
+				summary.isRecord ? 'NEW RECORD' : 'RUN OVER',
+				{
+					fontFamily: 'Retro Font',
+					fontSize: '34px',
+					color: summary.isRecord ? '#00e676' : '#ff5252',
+				},
+			)
+			.setOrigin(0.5)
+
+		const diff = scene.add
+			.text(
+				cx,
+				cy - panelH / 2 + 76,
+				summary.difficulty.label.toUpperCase(),
+				{
+					fontFamily: 'Retro Font',
+					fontSize: '16px',
+					color: hex,
+				},
+			)
+			.setOrigin(0.5)
+
+		// Hero score.
+		const scoreY = cy - panelH / 2 + 128
+		const score = scene.add
+			.text(cx, scoreY, summary.score.toLocaleString(), {
 				fontFamily: 'Retro Font',
-				fontSize: '32px',
-				color: '#ff5722',
+				fontSize: '56px',
+				color: '#ffffff',
+			})
+			.setOrigin(0.5)
+		const scoreLabel = scene.add
+			.text(cx, scoreY + 36, 'SCORE', {
+				fontFamily: 'Retro Font',
+				fontSize: '13px',
+				color: '#7f8fa6',
 			})
 			.setOrigin(0.5)
 
-		// Score row (MonkeyType-style: big numbers)
-		this.scoreText = scene.add
-			.text(cx - 60, cy - panelHeight / 2 + 95, `${score}`, {
-				fontFamily: 'Retro Font',
-				fontSize: '28px',
-				color: '#e1f5fe',
-			})
-			.setOrigin(0.5)
-
-		this.bestText = scene.add
-			.text(cx + 60, cy - panelHeight / 2 + 95, `${bestScore}`, {
-				fontFamily: 'Retro Font',
-				fontSize: '28px',
-				color: '#64ffda',
-			})
-			.setOrigin(0.5)
-
-		// Stats grid (MonkeyType-style: label above value)
-		const statStyle = { fontFamily: 'Retro Font', fontSize: '16px' }
-		const statLabelStyle = {
-			fontFamily: 'Retro Font',
-			fontSize: '12px',
-			color: '#78909c',
-		}
-		const statY = cy - 30
-		const statSpacing = 100
-
-		// This run stats - add to container
+		// Stat grid: this run vs personal best for the same difficulty.
+		const gridY = cy - 20
+		const colX = [cx - 130, cx, cx + 130]
+		const stats: Array<[string, string, string]> = [
+			['wpm', String(summary.wpm), String(summary.personalBests.wpm)],
+			[
+				'acc',
+				`${summary.accuracy}%`,
+				`${summary.personalBests.accuracy}%`,
+			],
+			[
+				'combo',
+				String(summary.combo),
+				String(summary.personalBests.combo),
+			],
+		]
 		const statEls: Phaser.GameObjects.GameObject[] = []
-		statEls.push(
-			scene.add
-				.text(cx - statSpacing, statY - 18, 'wpm', statLabelStyle)
-				.setOrigin(0.5),
-		)
-		statEls.push(
-			scene.add
-				.text(cx - statSpacing, statY, `${wpm}`, {
-					...statStyle,
-					color: '#00e676',
-				})
-				.setOrigin(0.5),
-		)
-		statEls.push(
-			scene.add
-				.text(cx, statY - 18, 'acc', statLabelStyle)
-				.setOrigin(0.5),
-		)
-		statEls.push(
-			scene.add
-				.text(cx, statY, `${accuracy}%`, {
-					...statStyle,
-					color: '#00e676',
-				})
-				.setOrigin(0.5),
-		)
-		statEls.push(
-			scene.add
-				.text(cx + statSpacing, statY - 18, 'combo', statLabelStyle)
-				.setOrigin(0.5),
-		)
-		statEls.push(
-			scene.add
-				.text(cx + statSpacing, statY, `${thisRunCombo}`, {
-					...statStyle,
-					color: '#00e676',
-				})
-				.setOrigin(0.5),
-		)
-
-		// Personal bests (only if we have any)
-		if (bestWPM > 0 || bestAccuracy > 0 || longestCombo > 0) {
-			const pbY = statY + 55
+		stats.forEach(([label, value, best], i) => {
 			statEls.push(
 				scene.add
-					.text(cx, pbY - 32, 'personal bests', {
+					.text(colX[i], gridY - 30, label.toUpperCase(), {
 						fontFamily: 'Retro Font',
-						fontSize: '12px',
-						color: '#78909c',
+						fontSize: '13px',
+						color: '#7f8fa6',
 					})
 					.setOrigin(0.5),
 			)
 			statEls.push(
 				scene.add
-					.text(cx - statSpacing, pbY - 8, 'wpm', statLabelStyle)
-					.setOrigin(0.5),
-			)
-			statEls.push(
-				scene.add
-					.text(cx - statSpacing, pbY + 10, `${bestWPM}`, {
-						...statStyle,
-						color: '#64ffda',
+					.text(colX[i], gridY, value, {
+						fontFamily: 'Retro Font',
+						fontSize: '30px',
+						color: '#ffffff',
 					})
 					.setOrigin(0.5),
 			)
 			statEls.push(
 				scene.add
-					.text(cx, pbY - 8, 'acc', statLabelStyle)
-					.setOrigin(0.5),
-			)
-			statEls.push(
-				scene.add
-					.text(cx, pbY + 10, `${bestAccuracy}%`, {
-						...statStyle,
-						color: '#64ffda',
+					.text(colX[i], gridY + 24, `best ${best}`, {
+						fontFamily: 'Retro Font',
+						fontSize: '13px',
+						color: '#00e676',
 					})
 					.setOrigin(0.5),
 			)
-			statEls.push(
-				scene.add
-					.text(cx + statSpacing, pbY - 8, 'combo', statLabelStyle)
-					.setOrigin(0.5),
+		})
+
+		// Run summary line.
+		const summaryText = scene.add
+			.text(
+				cx,
+				gridY + 62,
+				`${summary.words} words   ·   level ${summary.level}   ·   ${fmtDuration(summary.durationSec)}`,
+				{
+					fontFamily: 'Retro Font',
+					fontSize: '15px',
+					color: '#9fb3c8',
+				},
 			)
-			statEls.push(
-				scene.add
-					.text(cx + statSpacing, pbY + 10, `${longestCombo}`, {
-						...statStyle,
-						color: '#64ffda',
-					})
-					.setOrigin(0.5),
-			)
+			.setOrigin(0.5)
+
+		// A PB earned this run is worth calling out explicitly.
+		const improvements: string[] = []
+		if (summary.score >= summary.personalBests.score && summary.score > 0) {
+			improvements.push('score')
+		}
+		const pbLine = improvements.length
+			? scene.add
+					.text(
+						cx,
+						gridY + 90,
+						`NEW BEST ${improvements.join(' + ').toUpperCase()}!`,
+						{
+							fontFamily: 'Retro Font',
+							fontSize: '16px',
+							color: '#00e676',
+						},
+					)
+					.setOrigin(0.5)
+			: null
+
+		const button = (
+			label: string,
+			y: number,
+			color: number,
+			action: () => void,
+		): Phaser.GameObjects.Text => {
+			const t = scene.add
+				.text(cx, y, label, {
+					fontFamily: 'Retro Font',
+					fontSize: '20px',
+					color: '#08131f',
+					backgroundColor: `#${color.toString(16).padStart(6, '0')}`,
+					padding: { left: 18, right: 18, top: 8, bottom: 8 },
+				})
+				.setOrigin(0.5)
+				.setInteractive({ useHandCursor: true })
+			t.on('pointerover', () => t.setScale(1.06))
+			t.on('pointerout', () => t.setScale(1))
+			t.on('pointerdown', () => {
+				if (!loadData().settings.muted) this.clickSound?.play()
+				this.destroy()
+				action()
+			})
+			return t
 		}
 
-		// Buttons with clear spacing
-		this.retryBtn = scene.make
-			.text({
-				x: cx,
-				y: cy + panelHeight / 2 - 100,
-				text: '[ Try Again ]',
-				style: {
-					font: '22px Retro Font',
-					color: '#e1f5fe',
-					backgroundColor: '#1976d2',
-					padding: { left: 14, right: 14, top: 6, bottom: 6 },
-				},
-				add: false,
-			})
-			.setOrigin(0.5)
-			.setInteractive({ useHandCursor: true })
-
-		this.menuBtn = scene.make
-			.text({
-				x: cx,
-				y: cy + panelHeight / 2 - 55,
-				text: '[ Menu ]',
-				style: {
-					font: '20px Retro Font',
-					color: '#e1f5fe',
-					backgroundColor: '#2e7d32',
-					padding: { left: 14, right: 14, top: 6, bottom: 6 },
-				},
-				add: false,
-			})
-			.setOrigin(0.5)
-			.setInteractive({ useHandCursor: true })
-
-		// Add score labels (created with scene.add, need to be in container)
-		const scoreLabelLeft = scene.add
-			.text(cx - 60, cy - panelHeight / 2 + 125, 'score', {
-				fontFamily: 'Retro Font',
-				fontSize: '14px',
-				color: '#78909c',
-			})
-			.setOrigin(0.5)
-		const scoreLabelRight = scene.add
-			.text(cx + 60, cy - panelHeight / 2 + 125, 'best', {
-				fontFamily: 'Retro Font',
-				fontSize: '14px',
-				color: '#78909c',
-			})
-			.setOrigin(0.5)
+		const retryBtn = button(
+			'[ RETRY ]  ⏎',
+			cy + panelH / 2 - 78,
+			0x00e676,
+			this.onRetry,
+		)
+		const menuBtn = button(
+			'[ MENU ]  ESC',
+			cy + panelH / 2 - 30,
+			0x2c3e50,
+			this.onMenu,
+		)
 
 		this.add([
-			this.bg,
-			this.panel,
-			this.titleText,
-			this.scoreText,
-			this.bestText,
-			scoreLabelLeft,
-			scoreLabelRight,
+			dim,
+			panel,
+			title,
+			diff,
+			score,
+			scoreLabel,
 			...statEls,
-			this.retryBtn,
-			this.menuBtn,
+			summaryText,
+			...(pbLine ? [pbLine] : []),
+			retryBtn,
+			menuBtn,
 		])
 
-		this.retryBtn.on('pointerdown', () => {
-			// Play click sound if not muted
-			const settings = loadData().settings
-			if (!settings.muted) {
-				this.clickSound.play()
-			}
+		// Entrance: scale the panel up so the result lands rather than appears.
+		panel.setScale(0.9, 0.9)
+		scene.tweens.add({
+			targets: panel,
+			scaleX: 1,
+			scaleY: 1,
+			duration: 220,
+			ease: 'Back.easeOut',
+		})
+		for (const o of [title, score, summaryText]) {
+			o.setAlpha(0)
+			scene.tweens.add({
+				targets: o,
+				alpha: 1,
+				duration: 260,
+				delay: 90,
+			})
+		}
 
+		// Keyboard: Enter retries, Escape returns to menu.
+		this.enterHandler = () => {
 			this.destroy()
 			this.onRetry()
-		})
-
-		this.menuBtn.on('pointerdown', () => {
-			// Play click sound if not muted
-			const settings = loadData().settings
-			if (!settings.muted) {
-				this.clickSound.play()
-			}
-
-			this.destroy()
-			this.onMenu()
-		})
-
-		this.escKeyHandler = () => {
+		}
+		this.escHandler = () => {
 			this.destroy()
 			this.onMenu()
 		}
-
-		scene.input.keyboard!.on('keydown-ESC', this.escKeyHandler)
+		scene.input.keyboard?.on('keydown-ENTER', this.enterHandler)
+		scene.input.keyboard?.on('keydown-ESC', this.escHandler)
 
 		this.setInteractive(
 			new Phaser.Geom.Rectangle(0, 0, width, height),
 			Phaser.Geom.Rectangle.Contains,
 		)
-		if (this.input) {
-			this.input.enabled = true
-		}
 	}
 
-	destroy(fromScene?: boolean) {
-		if (this.escKeyHandler) {
-			this.scene.input.keyboard!.off('keydown-ESC', this.escKeyHandler)
-			this.escKeyHandler = undefined
+	override destroy(fromScene?: boolean): void {
+		const kb = this.scene.input.keyboard
+		if (kb) {
+			kb.off('keydown-ENTER', this.enterHandler)
+			kb.off('keydown-ESC', this.escHandler)
 		}
+		this.clickSound?.destroy()
 		super.destroy(fromScene)
 	}
 }

@@ -1,146 +1,128 @@
-# Yatiksu
+# Yakitsku
 
-A desktop-first, offline 8-bit typing runner built with Phaser 4, TypeScript, and Vite.
+A pixel-art endless typing runner. Type the word to strike the monster before it
+reaches your runner. Built with Phaser 3, TypeScript and Vite.
 
-## Setup
+## Quick start
 
 ```bash
-pnpm install
-pnpm dev
+npm install
+npm run dev        # http://localhost:5173
 ```
 
-For full specs and engineering blueprint, see `app.md`.
-
-Next Steps:
-I've thoroughly reviewed the full codebase. Here are my suggestions, prioritized by impact:
-
----
-
-## High Impact - Core Mechanics
-
-### 1. Enable and polish power-ups
-
-Power-ups are fully coded (`spawnPowerUp` at line 683, `handlePowerUp` at line 709 in `src/scenes/Play.ts`) but commented out at line 293. The 5% spawn rate is also too low -- bump it to 15-20% initially, and tie spawn chance to combo streak to reward consistent play.
-
-### 2. Multiple simultaneous monsters
-
-Currently only one monster exists at a time. Spawning 2-3 monsters with different words (especially at higher difficulty) would create a prioritization mechanic -- the player must choose which word to type first based on which monster is closest. This is the single biggest gameplay depth improvement.
-
-### 3. Monster types should have distinct behaviors
-
-Right now `Monster.ts` types (Skeleton, Flying eye, Mushroom, Goblin) are purely cosmetic -- same speed, same collision. Give them traits:
-
-- **Skeleton**: slow, tanky (requires a longer word)
-- **Flying eye**: fast, sinusoidal movement
-- **Mushroom**: average speed, splits into 2 smaller words on "death"
-- **Goblin**: rushes in bursts, pauses briefly
-
-### 4. Implement life recovery from the blueprint
-
-`app.md` line 61 specifies `+1 life every 40-word flawless streak (cap 5)` but it's not implemented. This gives skilled players a safety net and rewards accuracy.
-
-### 5. Monster reaching avatar should penalize, not silently respawn
-
-When a monster goes off-screen left (line 617-625), it just respawns quietly. It should call `loseLife()` -- the player failed to type the word in time. Currently the only life loss is physics collision, which feels inconsistent.
-
----
-
-## Medium Impact - Game Feel / Juice
-
-### 6. Screen shake and flash on damage
-
-`loseLife()` at line 435 just decrements lives and updates HUD. Add camera shake and a red flash:
-
-```typescript
-this.cameras.main.shake(200, 0.01)
-this.cameras.main.flash(150, 255, 0, 0, false, null, null, 0.3)
+```bash
+npm run verify     # typecheck + lint + tests + production build
 ```
 
-### 7. Particle burst on monster kill
+| Script              | Purpose                        |
+| ------------------- | ------------------------------ |
+| `npm run dev`       | Dev server with HMR            |
+| `npm run build`     | Typecheck and build to `dist/` |
+| `npm run preview`   | Serve the production build     |
+| `npm run test`      | Unit tests (Vitest)            |
+| `npm run typecheck` | `tsc --noEmit`                 |
+| `npm run lint`      | ESLint                         |
 
-When a monster dies, emit a particle burst at its position (blood, bones, or sparks depending on type). Phaser 3's particle system handles this natively. Adds massive "game feel."
+## How to play
 
-### 8. Combo milestone celebrations
+- Type the word shown to strike. Correct letters turn green.
+- A wrong letter turns **red** — press <kbd>Backspace</kbd> to fix it before you
+  can finish the word.
+- Every correct key **shoves the monster back**. Fast typing buys real time.
+- A mistype makes the monster surge forward.
+- If the monster reaches you, you lose a life. Lose them all and the run ends.
+- <kbd>Esc</kbd> pauses (and doubles as the settings menu).
+- Chaining words builds a combo multiplier. A word with no mistakes pays +50%.
 
-The combo text (`Combo: N`) updates silently. Add visual pop-ups at milestones (10, 25, 50, 100) with tween scale + fade:
+| Difficulty | Lives | Time per letter | Roughly gates at |
+| ---------- | ----- | --------------- | ---------------- |
+| Easy       | 4     | 430 ms          | casual typists   |
+| Medium     | 3     | 335 ms          | casual typists   |
+| Hard       | 2     | 250 ms          | ~70 WPM by lv 29 |
+| I am God   | 1     | 190 ms          | ~70 WPM by lv 12 |
 
-```typescript
-if ([10, 25, 50, 100].includes(this.combo)) {
-	const popup = this.add
-		.text(
-			this.scale.width / 2,
-			this.scale.height / 2 - 80,
-			`${this.combo}x COMBO!`,
-			{ fontSize: '48px', color: '#ff0' },
-		)
-		.setOrigin(0.5)
-	this.tweens.add({
-		targets: popup,
-		y: popup.y - 60,
-		alpha: 0,
-		duration: 1000,
-		onComplete: () => popup.destroy(),
-	})
-}
+## Architecture
+
+```
+src/
+├─ main.ts              # Game config, scale fitting, HTML bridge
+├─ menu.ts              # Landing menu, modals, settings wiring
+├─ style.css            # All styling
+├─ scenes/
+│  ├─ Boot.ts           # Preload with a progress bar
+│  └─ Play.ts           # Orchestrates the run
+└─ systems/
+   ├─ tuning.ts         # All balance constants + the difficulty model
+   ├─ runState.ts       # Score, combo, lives, WPM/accuracy. No Phaser.
+   ├─ typingEngine.ts   # Word/caret/error state. No Phaser.
+   ├─ wordBank.ts       # Word selection and repeat avoidance
+   ├─ Monster.ts        # Sprite, animations, hitbox
+   ├─ WordDisplay.ts    # Per-character word rendering
+   ├─ Hud.ts            # HUD + particle helpers
+   ├─ Juice.ts          # Hitstop, slow-mo, shake, flash
+   ├─ persistence.ts    # Versioned save data
+   └─ SettingsModal.ts / GameOverModal.ts
 ```
 
-### 9. Danger zone warning
+`runState.ts`, `typingEngine.ts` and `wordBank.ts` are deliberately free of any
+Phaser import, so the balance and input rules are unit-testable in plain Node.
 
-When the monster is within ~200px of the avatar, tint the word red and pulse the border or play a warning sound. Gives the player urgency cues instead of sudden death.
+## The difficulty model
 
-### 10. Word display on the monster itself
+This is the part worth understanding before changing balance.
 
-Show the word floating above the monster sprite (not in the center of the screen). This creates a direct visual link between the word and the threat. The center-screen text can stay as a secondary display.
+The earlier design ramped monster speed and word length **independently**, so
+nothing related them. On "hard" that required 1140 WPM for the very first
+3-letter word — the mode was mathematically unwinnable.
 
----
+The current model inverts it. Each word is given a **time budget**, and the
+monster speed is _derived_ from that budget:
 
-## Lower Impact - Polish & Retention
+```
+budgetMs = reactionMs + wordLength × msPerChar × levelDecay^level
+speed    = travelDistance / (budgetMs / 1000)      // px per second
+```
 
-### 11. Backspace support in `TypingEngine`
+A longer word produces a faster monster, so the two stay coupled. Two properties
+fall out of this and are covered by tests:
 
-`TypingEngine.input()` (line 10 of `src/systems/typingEngine.ts`) is forward-only. Adding optional backspace support (toggled via settings) would make the game more accessible on easier difficulties.
+- **A run is always theoretically completable** at the chosen difficulty.
+- **Difficulty plateaus** rather than running away: the decay term is floored at
+  50% of base, reached around level 47, so runs have a defined skill ceiling.
 
-### 12. Adaptive word difficulty
+Monsters also never move per-frame. Everything is delta-time, so a 144 Hz display
+plays the same game as a 60 Hz one.
 
-`getNextWord()` at line 396 picks randomly within a tier. Track the player's recent accuracy -- if they're acing it, jump a tier early; if struggling, stay on the current tier longer. This creates a flow state.
+Every constant lives in `src/systems/tuning.ts`; nothing in the gameplay code
+should contain a bare number.
 
-### 13. Streak bonus scoring
+## Notable fixes over the previous build
 
-Beyond combo multiplier, add a "perfect word" bonus (no mistakes on that word) worth +50% of the base score. This rewards precision and gives a reason to not just mash keys.
+- **Frame-rate independence.** Movement was `px * 2` per _frame_, making a 144 Hz
+  monitor 2.4× harder than a 60 Hz one.
+- **No leaks on restart.** `shutdown()` was defined but Phaser only _emits_ a
+  shutdown event, so it never ran — every retry leaked listeners, timers and
+  sounds. It is now registered against the event.
+- **No async race.** `spawnNewMonster` was `async` and awaited at four call
+  sites; overlapping spawns orphaned monsters. It is now synchronous and
+  callbacks fire exactly once.
+- **Async race in the world scroll** — parallax now derives from distance
+  travelled, so ground and background stay locked to the monster at any speed.
+- **Visible typing.** The typed-letters `Text` object was created at 10% alpha.
+- **Backspace** support with per-character error state.
+- **No `P` hotkey.** It collided with the letter P, so words like "PIG" opened
+  the pause menu.
+- **Canvas fits the viewport** and never needs scrolling; scale is clamped to
+  1:1 so the pixel art is never upscaled.
+- **Settings actually persist** and are shared by the menu and the pause screen.
 
-### 14. Score persistence improvements
+## Testing
 
-`persistence.ts` only tracks `bestScore` and `lastScores`. Add:
+`src/systems/__tests__/systems.test.ts` covers the typing model, the fairness
+invariants, scoring, progression and word selection. The fairness tests are the
+important ones: they fail if anyone reintroduces a difficulty setting that
+requires an impossible typing speed.
 
-- Best WPM / best accuracy
-- Total words typed (all-time)
-- Longest combo ever
-- Per-difficulty leaderboards
+## Licence
 
-### 15. Progressive speed curve
-
-`increaseDifficulty()` at line 886 uses a linear ramp. A logarithmic curve (`baseSpeed * (1 + 0.3 * Math.log(difficultyLevel + 1))`) feels fairer -- fast initial ramp, then plateaus, keeping it challenging but not impossible.
-
----
-
-## Summary Table
-
-| #   | Suggestion                     | Effort | Impact    |
-| --- | ------------------------------ | ------ | --------- |
-| 1   | Enable power-ups               | Low    | High      |
-| 2   | Multiple simultaneous monsters | Medium | Very High |
-| 3   | Distinct monster behaviors     | Medium | High      |
-| 4   | Life recovery (40-word streak) | Low    | Medium    |
-| 5   | Penalize off-screen monster    | Low    | High      |
-| 6   | Screen shake / flash           | Low    | Medium    |
-| 7   | Death particles                | Low    | Medium    |
-| 8   | Combo milestones               | Low    | Medium    |
-| 9   | Danger zone warning            | Low    | Medium    |
-| 10  | Word on monster sprite         | Medium | High      |
-| 11  | Backspace support              | Low    | Low       |
-| 12  | Adaptive difficulty            | Medium | High      |
-| 13  | Perfect word bonus             | Low    | Medium    |
-| 14  | Richer persistence             | Low    | Medium    |
-| 15  | Logarithmic speed curve        | Low    | Medium    |
-
-Want me to implement any of these? I'd recommend starting with **#1, #4, #5, #6** as quick wins, then tackling **#2 + #3 + #10** together as the big gameplay upgrade.
+MIT — see [LICENSE](./LICENSE). Original art and audio inherit the same licence.

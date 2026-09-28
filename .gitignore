@@ -32,8 +32,6 @@ node_modules/
 # Mac system files
 .DS_Store
 
-# Optional: ignore generated asset/data/scene/system folders if used for build output
-# /assets/
-# /data/
-# /scenes/
-# /systems/
+# Agent/test scratch output
+.playwright-mcp/
+shot-*.png

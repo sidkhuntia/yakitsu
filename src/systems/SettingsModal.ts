@@ -1,169 +1,255 @@
 import Phaser from 'phaser'
-import { updateSettings, loadData, clearHighscores } from './persistence'
+import {
+	clearHighscores,
+	loadData,
+	updateSettings,
+	type Settings,
+} from './persistence'
 
+const PANEL_W = 480
+const PANEL_H = 500
+const ROW_H = 46
+const ROWS_TOP = 92
+/** Vertical gap between the settings rows and the action buttons. */
+const BUTTONS_TOP = 60
+
+type Row = {
+	label: () => string
+	toggle: (s: Settings) => boolean
+	flip: (s: Settings) => Partial<Settings>
+	help: string
+}
+
+/**
+ * Pause / settings overlay.
+ *
+ * Doubles as the pause menu, so it is the only settings surface the player
+ * needs during a run. Every control writes through to persistence immediately
+ * so nothing is lost on restart.
+ */
 export class SettingsModal extends Phaser.GameObjects.Container {
-	private bg: Phaser.GameObjects.Rectangle
-	private panel: Phaser.GameObjects.Rectangle
-	private musicBtn: Phaser.GameObjects.Text
-	private lockInputBtn: Phaser.GameObjects.Text
-	private clearBtn: Phaser.GameObjects.Text
-	private closeBtn: Phaser.GameObjects.Text
-	private onClose: () => void
-	private clickSound: Phaser.Sound.BaseSound
+	private readonly rows: Row[] = [
+		{
+			label: () => {
+				const s = loadData().settings
+				return `Sound: ${s.muted ? 'OFF' : 'ON'}`
+			},
+			toggle: (s) => !s.muted,
+			flip: (s) => ({ muted: !s.muted }),
+			help: 'Mute or unmute all audio',
+		},
+		{
+			label: () => {
+				const s = loadData().settings
+				return `Music: ${Math.round(s.musicVolume * 100)}%`
+			},
+			toggle: (s) => s.musicVolume > 0,
+			flip: (s) => ({
+				musicVolume: s.musicVolume > 0 ? 0 : 0.35,
+			}),
+			help: 'Background music volume',
+		},
+		{
+			label: () => {
+				const s = loadData().settings
+				return `Screen shake: ${s.screenShake ? 'ON' : 'OFF'}`
+			},
+			toggle: (s) => s.screenShake,
+			flip: (s) => ({ screenShake: !s.screenShake }),
+			help: 'Camera shake on hits and kills',
+		},
+		{
+			label: () => {
+				const s = loadData().settings
+				return `Strict typing: ${s.lockInputOnMistake ? 'ON' : 'OFF'}`
+			},
+			toggle: (s) => s.lockInputOnMistake,
+			flip: (s) => ({ lockInputOnMistake: !s.lockInputOnMistake }),
+			help: 'Harder: a wrong key costs more time',
+		},
+		{
+			label: () => {
+				const s = loadData().settings
+				return `Assist: ${Math.round(s.assistLevel * 100)}%`
+			},
+			toggle: (s) => s.assistLevel >= 1,
+			flip: (s) => ({
+				assistLevel: s.assistLevel >= 1 ? 0.7 : 1,
+			}),
+			help: 'Slower monsters if you need more time',
+		},
+	]
 
-	constructor(scene: Phaser.Scene, onClose: () => void) {
-		super(scene)
-		this.onClose = onClose
+	private readonly buttons: Phaser.GameObjects.Text[] = []
+	private readonly resumeBtn: Phaser.GameObjects.Text
+	private readonly restartBtn: Phaser.GameObjects.Text
+	private readonly menuBtn: Phaser.GameObjects.Text
+	private readonly escHandler: () => void
+	private clickSound?: Phaser.Sound.BaseSound
+
+	constructor(
+		private readonly hostScene: Phaser.Scene,
+		private readonly onClose: () => void,
+	) {
+		super(hostScene)
+		const scene = hostScene
 		const { width, height } = scene.scale
+		const cx = width / 2
 
-		// Add click sound
-		this.clickSound = scene.sound.add('clickSound', { volume: 0.7 })
+		this.clickSound = scene.cache.audio.exists('clickSound')
+			? scene.sound.add('clickSound', { volume: 0.5 })
+			: undefined
 
-		this.bg = scene.add
-			.rectangle(width / 2, height / 2, width, height, 0x000000, 0.5)
+		const dim = scene.add
+			.rectangle(cx, height / 2, width, height, 0x05080d, 0.82)
 			.setInteractive()
-		this.panel = scene.add
-			.rectangle(width / 2, height / 2, 400, 280, 0x0f1419, 0.98)
-			.setStrokeStyle(2, 0x00e676)
-		const baseY = height / 2 - 80
-		this.musicBtn = scene.add
-			.text(width / 2, baseY, '', {
+
+		// Lay the panel out from its top edge so the content can never overflow
+		// the frame, whatever the row count.
+		const top = height / 2 - PANEL_H / 2
+
+		const panel = scene.add
+			.rectangle(cx, height / 2, PANEL_W, PANEL_H, 0x0b1018, 0.98)
+			.setStrokeStyle(3, 0x64ffda)
+
+		const title = scene.add
+			.text(cx, top + 40, 'PAUSED', {
 				fontFamily: 'Retro Font',
-				fontSize: '24px',
-				color: '#e1f5fe',
-				backgroundColor: '#1a2332',
-				padding: { left: 12, right: 12, top: 6, bottom: 6 },
+				fontSize: '30px',
+				color: '#ffffff',
 			})
 			.setOrigin(0.5)
-			.setInteractive()
-		this.lockInputBtn = scene.add
-			.text(width / 2, baseY + 60, '', {
-				fontFamily: 'Retro Font',
-				fontSize: '20px',
-				color: '#e1f5fe',
-				backgroundColor: '#1a2332',
-				padding: { left: 12, right: 12, top: 6, bottom: 6 },
+
+		// Rows
+		const startY = top + ROWS_TOP
+		this.rows.forEach((row, i) => {
+			const y = startY + i * ROW_H
+			const btn = scene.add
+				.text(cx, y, row.label(), {
+					fontFamily: 'Retro Font',
+					fontSize: '18px',
+					color: '#e6f1ff',
+					backgroundColor: '#141d2b',
+					padding: { left: 14, right: 14, top: 7, bottom: 7 },
+				})
+				.setOrigin(0.5)
+				.setInteractive({ useHandCursor: true })
+			btn.on('pointerover', () => btn.setScale(1.04))
+			btn.on('pointerout', () => btn.setScale(1))
+			btn.on('pointerdown', () => {
+				if (!loadData().settings.muted) this.clickSound?.play()
+				const s = loadData().settings
+				updateSettings(row.flip(s))
+				this.refresh()
 			})
-			.setOrigin(0.5)
-			.setInteractive()
-		this.clearBtn = scene.add
-			.text(width / 2, baseY + 120, 'Clear Highscores', {
-				fontFamily: 'Retro Font',
-				fontSize: '20px',
-				color: '#ff5722',
-				backgroundColor: '#1a2332',
-				padding: { left: 12, right: 12, top: 6, bottom: 6 },
-			})
-			.setOrigin(0.5)
-			.setInteractive()
-		this.closeBtn = scene.add
-			.text(width / 2, baseY + 180, '[ Close ]', {
-				fontFamily: 'Retro Font',
-				fontSize: '20px',
-				color: '#64ffda',
-				backgroundColor: '#1e3a8a',
-				padding: { left: 12, right: 12, top: 6, bottom: 6 },
-			})
-			.setOrigin(0.5)
-			.setInteractive()
-		this.add([
-			this.bg,
-			this.panel,
-			this.musicBtn,
-			this.lockInputBtn,
-			this.clearBtn,
-			this.closeBtn,
-		])
-		this.refresh()
-
-		this.musicBtn.on('pointerdown', () => {
-			const settings = loadData().settings
-			const newMutedSetting = !settings.muted
-			updateSettings({ muted: newMutedSetting })
-
-			// Play click sound if we're unmuting
-			if (newMutedSetting) {
-				this.clickSound.play()
-			}
-
-			// Handle all game sounds
-			this.updateAllGameSounds(newMutedSetting)
-
-			this.refresh()
+			this.buttons.push(btn)
 		})
 
-		this.lockInputBtn.on('pointerdown', () => {
-			const settings = loadData().settings
-			updateSettings({ lockInputOnMistake: !settings.lockInputOnMistake })
+		// One line of context for the whole panel rather than per-row help,
+		// which would need hover state to be useful.
+		const rowsBottom = startY + (this.rows.length - 1) * ROW_H
+		const hint = scene.add
+			.text(
+				cx,
+				rowsBottom + 30,
+				'Lower Assist gives you more time per word',
+				{
+					fontFamily: 'Retro Font',
+					fontSize: '13px',
+					color: '#7f8fa6',
+				},
+			)
+			.setOrigin(0.5)
 
-			// Play click sound if not muted
-			if (!settings.muted) {
-				this.clickSound.play()
-			}
+		const mkBtn = (
+			label: string,
+			y: number,
+			color: number,
+			action: () => void,
+		): Phaser.GameObjects.Text => {
+			const t = scene.add
+				.text(cx, y, label, {
+					fontFamily: 'Retro Font',
+					fontSize: '19px',
+					color: '#08131f',
+					backgroundColor: `#${color.toString(16).padStart(6, '0')}`,
+					padding: { left: 16, right: 16, top: 7, bottom: 7 },
+				})
+				.setOrigin(0.5)
+				.setInteractive({ useHandCursor: true })
+			t.on('pointerover', () => t.setScale(1.05))
+			t.on('pointerout', () => t.setScale(1))
+			t.on('pointerdown', () => {
+				if (!loadData().settings.muted) this.clickSound?.play()
+				action()
+			})
+			return t
+		}
 
-			this.refresh()
-		})
-
-		this.clearBtn.on('pointerdown', () => {
-			clearHighscores()
-
-			// Play click sound if not muted
-			const settings = loadData().settings
-			if (!settings.muted) {
-				this.clickSound.play()
-			}
-
-			this.refresh()
-		})
-
-		this.closeBtn.on('pointerdown', () => {
-			// Play click sound if not muted
-			const settings = loadData().settings
-			if (!settings.muted) {
-				this.clickSound.play()
-			}
-
+		// Buttons stack downward from a computed anchor, with the last one
+		// landing exactly on the panel's bottom margin.
+		const btnTop = rowsBottom + BUTTONS_TOP
+		this.resumeBtn = mkBtn('[ RESUME ]  ESC', btnTop, 0x00e676, () =>
+			this.close(),
+		)
+		this.restartBtn = mkBtn('[ RESTART ]', btnTop + 44, 0xffb300, () => {
 			this.destroy()
-			this.onClose()
+			this.hostScene.scene.restart()
 		})
+		this.menuBtn = mkBtn('[ QUIT TO MENU ]', btnTop + 88, 0x546e7a, () => {
+			this.destroy()
+			window.dispatchEvent(new CustomEvent('returnToMenu'))
+		})
+
+		// Clear save, tucked into the corner so it can't be hit by accident.
+		const clear = scene.add
+			.text(cx - PANEL_W / 2 + 18, top + PANEL_H - 16, 'reset data', {
+				fontFamily: 'Retro Font',
+				fontSize: '13px',
+				color: '#ff5252',
+			})
+			.setOrigin(0, 0.5)
+			.setInteractive({ useHandCursor: true })
+		clear.on('pointerdown', () => {
+			clearHighscores()
+			this.refresh()
+		})
+
+		this.add([
+			dim,
+			panel,
+			title,
+			...this.buttons,
+			hint,
+			this.resumeBtn,
+			this.restartBtn,
+			this.menuBtn,
+			clear,
+		])
+
+		this.escHandler = () => this.close()
+		scene.input.keyboard?.on('keydown-ESC', this.escHandler)
 
 		this.setInteractive(
 			new Phaser.Geom.Rectangle(0, 0, width, height),
 			Phaser.Geom.Rectangle.Contains,
 		)
-		if (this.input) {
-			this.input.enabled = true
-		}
 	}
 
-	refresh() {
-		const settings = loadData().settings
-		this.musicBtn.setText(
-			settings.muted ? 'Music/SFX: OFF' : 'Music/SFX: ON',
-		)
-		this.lockInputBtn.setText(
-			settings.lockInputOnMistake
-				? 'Lock Input on Mistake: ON'
-				: 'Lock Input on Mistake: OFF',
-		)
+	private close(): void {
+		this.destroy()
+		this.onClose()
 	}
 
-	updateAllGameSounds(muted: boolean) {
-		// Get all sound instances from the registry and current scene
-		const menuMusic = this.scene.game.registry.get(
-			'menuMusic',
-		) as Phaser.Sound.BaseSound
+	refresh(): void {
+		const s = loadData().settings
+		this.rows.forEach((row, i) => this.buttons[i].setText(row.label()))
+		void s
+	}
 
-		// Handle menu music
-		if (menuMusic) {
-			if (muted) {
-				menuMusic.pause()
-			} else {
-				// Don't resume menu music if we're in the Play scene
-				if (this.scene.scene.key === 'Menu') {
-					menuMusic.resume()
-				}
-			}
-		}
+	override destroy(fromScene?: boolean): void {
+		this.hostScene.input.keyboard?.off('keydown-ESC', this.escHandler)
+		this.clickSound?.destroy()
+		super.destroy(fromScene)
 	}
 }

@@ -1,127 +1,596 @@
+@font-face {
+	font-family: 'Retro Font';
+	src: url('/assets/fonts/gaming_font.woff2') format('woff2');
+	font-weight: normal;
+	font-style: normal;
+	font-display: block;
+}
+
 :root {
-	font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-	line-height: 1.5;
-	font-weight: 400;
+	--bg-0: #0f1419;
+	--bg-1: #1a2332;
+	--accent: #00e676;
+	--accent-2: #64ffda;
+	--ink: #e1f5fe;
+	--muted: #7f8fa6;
+	--pixel: 'Retro Font', 'Jersey 10', monospace;
 
-	color-scheme: light dark;
-	color: rgba(255, 255, 255, 0.87);
-	background-color: #242424;
-
+	color-scheme: dark;
+	color: var(--ink);
+	background-color: var(--bg-0);
+	font-family: 'Jersey 10', monospace;
 	font-synthesis: none;
 	text-rendering: optimizeLegibility;
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
 }
 
-a {
-	font-weight: 500;
-	color: #646cff;
-	text-decoration: inherit;
-}
-a:hover {
-	color: #535bf2;
+* {
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
 }
 
 body {
-	margin: 0;
-	display: flex;
-	place-items: center;
-	min-width: 320px;
+	background: linear-gradient(135deg, var(--bg-0), var(--bg-1));
+	color: #fff;
 	min-height: 100vh;
-	background: linear-gradient(135deg, #23243a 0%, #181820 100%);
 }
 
-h1 {
-	font-size: 3.2em;
-	line-height: 1.1;
+kbd {
+	font-family: inherit;
+	background: #0b1018;
+	border: 1px solid #2c3e50;
+	border-bottom-width: 3px;
+	border-radius: 4px;
+	padding: 1px 6px;
+	color: var(--accent-2);
 }
 
-#app {
-	max-width: 1280px;
-	margin: 0 auto;
-	padding: 2rem;
-	text-align: center;
+/* --- top-level screens --------------------------------------------------
+   One `.hidden` class drives both screens.
+
+   `!important` is deliberate: this is a utility override that must beat the
+   component `display` rules below regardless of source order. Without it the
+   later `.landing-screen { display: flex }` wins on equal specificity, the
+   landing screen never hides, and it keeps a full viewport of scroll height
+   under the game — pushing the canvas below the fold. */
+
+.landing-screen.hidden,
+.game-screen.hidden {
+	display: none !important;
+}
+
+/* --- landing ------------------------------------------------------------ */
+
+.landing-screen {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	justify-content: center;
+	/* `center` here would clip the title on short viewports: centred flex
+	   overflow is unreachable at the top. Top-aligned keeps every row
+	   reachable while still looking centred when there is room. */
+	justify-content: flex-start;
+	min-height: 100vh;
+	min-height: 100dvh;
+	padding: 40px 20px;
+	text-align: center;
 }
 
-.logo {
-	height: 6em;
-	padding: 1.5em;
-	will-change: filter;
-	transition: filter 300ms;
-}
-.logo:hover {
-	filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.vanilla:hover {
-	filter: drop-shadow(0 0 2em #3178c6aa);
-}
-
-.card {
-	padding: 2em;
+.game-title {
+	font-family: var(--pixel);
+	font-size: clamp(2.6rem, 9vw, 5rem);
+	font-weight: normal;
+	color: #ffb347;
+	text-transform: uppercase;
+	letter-spacing: 4px;
+	margin-bottom: 12px;
+	text-shadow:
+		4px 5px 0 #000,
+		2px 2px 0 #7a2d06,
+		6px 6px 0 #7a2d06,
+		8px 8px 0 #7a2d06;
 }
 
-.read-the-docs {
-	color: #888;
+.game-subtitle {
+	font-size: 1.25rem;
+	color: var(--accent-2);
+	margin-bottom: 24px;
+	max-width: 40ch;
+	line-height: 1.4;
 }
 
-button {
+.high-score-display {
+	background: rgba(26, 35, 50, 0.95);
+	border: 2px solid var(--accent);
 	border-radius: 8px;
-	border: 1px solid transparent;
-	padding: 0.6em 1.2em;
-	font-size: 1em;
-	font-weight: 500;
-	font-family: inherit;
-	background-color: #1a1a1a;
-	cursor: pointer;
-	transition: border-color 0.25s;
-}
-button:hover {
-	border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-	outline: 4px auto -webkit-focus-ring-color;
+	padding: 8px 20px;
+	margin-bottom: 24px;
+	font-family: var(--pixel);
+	font-size: 1.3rem;
+	box-shadow: 0 4px 15px rgba(0, 230, 118, 0.2);
 }
 
-@media (prefers-color-scheme: light) {
-	:root {
-		color: #213547;
-		background-color: #ffffff;
-	}
-	a:hover {
-		color: #747bff;
-	}
-	button {
-		background-color: #f9f9f9;
-	}
+.high-score-label {
+	color: var(--accent);
+	margin-right: 10px;
+	text-transform: uppercase;
+	letter-spacing: 1px;
+}
+
+.high-score-value {
+	color: var(--accent-2);
+	font-weight: bold;
+	font-size: 1.6rem;
+}
+
+.menu-container {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	width: min(100%, 460px);
+}
+
+.menu-section {
+	background: rgba(26, 35, 50, 0.9);
+	border: 3px solid #1e3a8a;
+	border-radius: 8px;
+	padding: 24px;
+	text-align: left;
+}
+
+.section-title {
+	font-size: 1.3rem;
+	color: var(--accent);
+	margin-bottom: 16px;
+	text-transform: uppercase;
+	letter-spacing: 2px;
+	border-bottom: 2px solid var(--accent);
+	padding-bottom: 8px;
+}
+
+.menu-button {
+	display: block;
+	width: 100%;
+	padding: 14px 24px;
+	margin-bottom: 12px;
+	background: #1976d2;
+	color: #fff;
+	border: none;
+	border-radius: 5px;
+	font-family: inherit;
+	font-size: 1.05rem;
+	font-weight: bold;
+	text-transform: uppercase;
+	letter-spacing: 1px;
+	cursor: pointer;
+	transition:
+		background 0.15s ease,
+		transform 0.15s ease,
+		box-shadow 0.15s ease;
+	text-align: center;
+	box-shadow: 0 2px 8px rgba(25, 118, 210, 0.3);
+}
+
+.menu-button:last-child {
+	margin-bottom: 0;
+}
+
+.menu-button:hover {
+	background: #1565c0;
+	transform: translateY(-2px);
+	box-shadow: 0 4px 12px rgba(25, 118, 210, 0.4);
+}
+
+.menu-button.secondary {
+	background: #00838f;
+	box-shadow: 0 2px 8px rgba(0, 131, 143, 0.3);
+}
+.menu-button.secondary:hover {
+	background: #00695c;
+}
+
+.menu-button.tertiary {
+	background: #2e7d32;
+	box-shadow: 0 2px 8px rgba(46, 125, 50, 0.3);
+}
+.menu-button.tertiary:hover {
+	background: #1b5e20;
+}
+
+.menu-button.difficulty-god {
+	background: #7b1fa2;
+	box-shadow: 0 2px 8px rgba(123, 31, 162, 0.3);
+}
+.menu-button.difficulty-god:hover {
+	background: #6a1b9a;
+}
+
+/* --- records table ------------------------------------------------------ */
+
+.records-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.95rem;
+}
+
+.records-table th {
+	color: var(--muted);
+	font-weight: normal;
+	text-transform: uppercase;
+	letter-spacing: 1px;
+	font-size: 0.75rem;
+	padding-bottom: 6px;
+	text-align: right;
+}
+
+.records-table th:first-child,
+.records-table td:first-child {
+	text-align: left;
+}
+
+.records-table td {
+	padding: 5px 0;
+	border-top: 1px solid rgba(100, 255, 218, 0.15);
+	text-align: right;
+	color: var(--ink);
+}
+
+.rec-name {
+	color: var(--accent-2);
+}
+
+.totals {
+	margin-top: 12px;
+	font-size: 0.8rem;
+	color: var(--muted);
+	text-align: center;
+}
+
+/* --- game screen -------------------------------------------------------- */
+
+/*
+ * The game screen is the only scrollable surface during a run, and it must
+ * start at the top. `100dvh` (not `100vh`) keeps it correct on mobile, where
+ * `vh` excludes the browser chrome and used to push the canvas below the fold.
+ */
+.game-screen {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	min-height: 100vh;
+	min-height: 100dvh;
+	justify-content: flex-start;
+	padding: 16px;
+}
+
+.game-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	width: 100%;
+	max-width: 1280px;
+	/* Fixed-height rows: the canvas must own all remaining vertical space. */
+	flex: 0 0 auto;
+	margin-bottom: 10px;
+}
+
+.game-logo {
+	font-size: 1.6rem;
+	color: var(--accent);
+	font-weight: bold;
+	text-transform: uppercase;
+	font-family: var(--pixel);
+	letter-spacing: 3px;
+	text-shadow:
+		2px 2px 0 #000,
+		3px 3px 0 #1b5e20;
+}
+
+.game-controls {
+	display: flex;
+	gap: 12px;
+}
+
+.control-btn {
+	padding: 9px 16px;
+	background: #1a2332;
+	color: var(--accent-2);
+	border: 2px solid #1e3a8a;
+	border-radius: 5px;
+	cursor: pointer;
+	font-family: inherit;
+	font-size: 0.95rem;
+	transition: all 0.15s ease;
+	box-shadow: 0 2px 8px rgba(30, 58, 138, 0.3);
+}
+
+.control-btn:hover {
+	background: #1e3a8a;
+	color: #fff;
+}
+
+.control-btn.primary {
+	background: #1976d2;
+	border-color: #1976d2;
+	color: #fff;
+}
+.control-btn.primary:hover {
+	background: #1565c0;
+}
+
+.fullscreen-icon {
+	display: inline-block;
+	vertical-align: middle;
+	margin-right: 6px;
+}
+
+.key-hint {
+	width: 100%;
+	max-width: 1280px;
+	text-align: center;
+	font-size: 0.8rem;
+	color: var(--muted);
+	flex: 0 0 auto;
+	margin-bottom: 8px;
+}
+
+/*
+ * #app is given an explicit pixel size by main.ts (computed from the space the
+ * header and hint bar leave over) and Phaser's FIT mode scales the 1280x720
+ * canvas into it. Keeping the size out of CSS avoids the circular measurement
+ * where the flex layout reports the canvas's own size back to Phaser.
+ */
+.game-container {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: var(--bg-0);
+	border: 3px solid #1e3a8a;
+	border-radius: 8px;
+	padding: 6px;
+	box-shadow: 0 8px 32px rgba(30, 58, 138, 0.4);
+	position: relative;
+	overflow: hidden;
+}
+
+#app {
+	display: block;
+	border-radius: 4px;
+	/* Phaser sizes the canvas to match; keep edges crisp. */
+	image-rendering: pixelated;
 }
 
 canvas {
-	image-rendering: pixelated;
 	display: block;
 	margin: 0 auto;
 	outline: none;
-	box-shadow:
-		0 4px 32px #000a,
-		0 0 0 8px #111b;
-	background: #222;
-	border-radius: 12px;
+	background: #0a0f16;
+	border-radius: 6px;
 }
 
 .fullscreen-canvas {
 	position: fixed !important;
-	top: 0;
-	left: 0;
-	right: 0;
-	bottom: 0;
+	inset: 0;
 	width: 100vw !important;
 	height: 100vh !important;
 	margin: 0 !important;
-	z-index: 1000;
+	z-index: 9999 !important;
+	object-fit: contain !important;
 	border-radius: 0 !important;
-	box-shadow: none !important;
+}
+
+/* --- modals ------------------------------------------------------------- */
+
+.modal {
+	display: none;
+	position: fixed;
+	inset: 0;
+	z-index: 1000;
+	background-color: rgba(0, 0, 0, 0.8);
+	backdrop-filter: blur(5px);
+}
+
+.modal.active {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	animation: modalFadeIn 0.2s ease;
+}
+
+.modal-content {
+	background: linear-gradient(135deg, var(--bg-0), var(--bg-1));
+	border: 3px solid var(--accent);
+	border-radius: 10px;
+	padding: 26px;
+	max-width: 560px;
+	width: 92%;
+	max-height: 84vh;
+	overflow-y: auto;
+	box-shadow: 0 10px 30px rgba(0, 230, 118, 0.3);
+	animation: modalSlideIn 0.22s ease;
+}
+
+.modal-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 20px;
+	padding-bottom: 12px;
+	border-bottom: 2px solid var(--accent);
+}
+
+.modal-title {
+	font-family: var(--pixel);
+	font-size: 1.6rem;
+	color: var(--accent);
+	text-transform: uppercase;
+	letter-spacing: 2px;
+	margin: 0;
+}
+
+.close-btn {
+	background: #1976d2;
+	color: #fff;
+	border: none;
+	border-radius: 50%;
+	width: 36px;
+	height: 36px;
+	font-size: 1.2rem;
+	cursor: pointer;
+	transition: all 0.15s ease;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+.close-btn:hover {
+	background: #1565c0;
+	transform: scale(1.08);
+}
+
+.instructions-list {
+	list-style: none;
+	text-align: left;
+}
+
+.instructions-list li {
+	padding: 8px 0;
+	color: var(--ink);
+	font-size: 1.05rem;
+	line-height: 1.45;
+	border-bottom: 1px solid rgba(100, 255, 218, 0.15);
+}
+.instructions-list li::before {
+	content: '→ ';
+	color: var(--accent);
+	font-weight: bold;
+	margin-right: 6px;
+}
+
+.difficulty-subtitle {
+	color: var(--accent-2);
+	margin-bottom: 16px;
+	opacity: 0.9;
+	font-size: 1rem;
+}
+
+.settings-item {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 14px 0;
+	border-bottom: 1px solid rgba(100, 255, 218, 0.15);
+	font-size: 1.05rem;
+	color: var(--ink);
+}
+
+.toggle-switch {
+	position: relative;
+	width: 58px;
+	height: 30px;
+	background: #1a2332;
+	border: 2px solid #1e3a8a;
+	border-radius: 15px;
+	cursor: pointer;
+	transition: all 0.2s ease;
+	flex: none;
+}
+
+.toggle-switch::after {
+	content: '';
+	position: absolute;
+	top: 3px;
+	left: 3px;
+	width: 20px;
+	height: 20px;
+	background: var(--accent-2);
+	border-radius: 50%;
+	transition: all 0.2s ease;
+}
+
+.toggle-switch.active {
+	background: var(--accent);
+	border-color: var(--accent);
+}
+.toggle-switch.active::after {
+	transform: translateX(26px);
+	background: #fff;
+}
+
+.modal-footer {
+	margin-top: 20px;
+	padding-top: 14px;
+	border-top: 1px solid rgba(100, 255, 218, 0.15);
+}
+
+@keyframes modalFadeIn {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+@keyframes modalSlideIn {
+	from {
+		transform: translateY(-30px);
+		opacity: 0;
+	}
+	to {
+		transform: translateY(0);
+		opacity: 1;
+	}
+}
+
+/* --- responsive --------------------------------------------------------- */
+
+@media (max-width: 780px) {
+	.game-subtitle {
+		font-size: 1rem;
+	}
+	.landing-screen {
+		padding: 20px 10px;
+	}
+	.records-table {
+		font-size: 0.8rem;
+	}
+	/* Keep the canvas in view on short/narrow screens rather than pushing it
+	   below the fold. */
+	.game-header,
+	.key-hint {
+		margin-bottom: 6px;
+	}
+	.game-logo {
+		font-size: 1.1rem;
+		letter-spacing: 2px;
+	}
+	.control-btn {
+		padding: 7px 11px;
+		font-size: 0.85rem;
+	}
+	.key-hint {
+		font-size: 0.7rem;
+	}
+	.game-screen {
+		padding: 8px;
+	}
+}
+
+/* --- accessibility ------------------------------------------------------ */
+
+:focus-visible {
+	outline: 3px solid var(--accent-2);
+	outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+	}
 }

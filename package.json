@@ -7,8 +7,12 @@
 		"dev": "vite",
 		"build": "tsc && vite build",
 		"preview": "vite preview",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"typecheck": "tsc --noEmit",
 		"lint": "eslint . --ext .js,.jsx,.ts,.tsx",
 		"format": "prettier --write .",
+		"verify": "npm run typecheck && npm run lint && npm run test && npm run build",
 		"prepare": "husky"
 	},
 	"devDependencies": {
@@ -19,7 +23,8 @@
 		"prettier": "^3.5.3",
 		"typescript": "~5.8.3",
 		"typescript-eslint": "^8.32.1",
-		"vite": "^6.3.5"
+		"vite": "^6.3.5",
+		"vitest": "^5.0.2"
 	},
 	"dependencies": {
 		"phaser": "^3.88.2"

@@ -3,26 +3,23 @@
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>Yakitsku</title>
+		<title>Yakitsku — Typing Runner</title>
 		<link rel="icon" href="/favicon.png" type="image/png" />
 		<meta
 			name="description"
-			content="A fun and engaging typing game to help your avatar dodge obstacles and achieve high scores." />
-		<meta
-			name="keywords"
-			content="typing game, avatar, obstacles, high score, fun, infinite runner, typing game, speed test,  interactive, 2d, 2d game, 2d typing game, 2d typing game with avatar, 2d typing game with avatar and obstacles, 2d typing game with avatar and obstacles and high score, 2d typing game with avatar and obstacles and high score and fun" />
+			content="A pixel-art endless runner where typing words is your weapon. Beat the monster, beat your score." />
 		<meta name="author" content="Siddhartha Khuntia" />
 		<meta property="og:title" content="Yakitsku - Typing Game" />
 		<meta
 			property="og:description"
-			content="Help your avatar dodge obstacles by typing words quickly." />
+			content="Type words fast to strike down monsters before they reach you." />
 		<meta property="og:image" content="/metadata.webp" />
 		<meta property="og:url" content="https://yakitsku.sidkhuntia.in" />
-		<meta name="twitter:card" content="" />
+		<meta name="twitter:card" content="summary_large_image" />
 		<meta name="twitter:title" content="Yakitsku - Typing Game" />
 		<meta
 			name="twitter:description"
-			content="Help your avatar dodge obstacles by typing words quickly." />
+			content="Type words fast to strike down monsters before they reach you." />
 		<meta name="twitter:image" content="/metadata.webp" />
 		<link rel="preconnect" href="https://fonts.googleapis.com" />
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -30,521 +27,15 @@
 			href="https://fonts.googleapis.com/css2?family=Jersey+10&display=swap"
 			rel="stylesheet" />
 	</head>
-	<!-- Google tag (gtag.js) -->
-	<script
-		async
-		src="https://www.googletagmanager.com/gtag/js?id=G-DJD5YDN0Q0"></script>
-	<script>
-		window.dataLayer = window.dataLayer || []
-		function gtag() {
-			dataLayer.push(arguments)
-		}
-		gtag('js', new Date())
-
-		gtag('config', 'G-DJD5YDN0Q0')
-	</script>
 	<body>
-		<style>
-			@font-face {
-				font-family: 'Retro Font';
-				src: url('/assets/fonts/gaming_font.woff2') format('woff2');
-				font-weight: normal;
-				font-style: normal;
-				font-display: swap;
-			}
-
-			* {
-				margin: 0;
-				padding: 0;
-				box-sizing: border-box;
-			}
-
-			body {
-				background: linear-gradient(135deg, #0f1419, #1a2332);
-				font-family: 'Jersey 10', monospace;
-				color: #fff;
-				min-height: 100vh;
-			}
-
-			/* Landing Screen */
-			.landing-screen {
-				display: flex;
-				flex-direction: column;
-				align-items: center;
-				justify-content: center;
-				min-height: 100vh;
-				padding: 40px 20px;
-				text-align: center;
-			}
-
-			.landing-screen.hidden {
-				display: none;
-			}
-
-			.game-title {
-				font-family: 'Retro Font', 'Jersey 10', monospace;
-				font-size: 5rem;
-				font-weight: normal;
-				color: #ffb347;
-				text-transform: uppercase;
-				letter-spacing: 4px;
-				margin-bottom: 20px;
-				text-shadow:
-					6px 8px 0 #000,
-					2px 2px 0 #7a2d06,
-					4px 4px 0 #7a2d06,
-					6px 6px 0 #7a2d06,
-					8px 8px 0 #7a2d06,
-					10px 10px 0 #7a2d06;
-				padding: 16px 16px 8px 16px;
-			}
-
-			.game-subtitle {
-				font-size: 1.5rem;
-				color: #64ffda;
-				margin-bottom: 30px;
-				max-width: 600px;
-			}
-
-			.high-score-display {
-				background: rgba(26, 35, 50, 0.95);
-				border: 2px solid #00e676;
-				border-radius: 8px;
-				padding: 10px 20px;
-				margin-bottom: 40px;
-				font-family: 'Retro Font', 'Jersey 10', monospace;
-				font-size: 1.4rem;
-				box-shadow: 0 4px 15px rgba(0, 230, 118, 0.2);
-			}
-
-			.high-score-label {
-				color: #00e676;
-				margin-right: 10px;
-				text-transform: uppercase;
-				letter-spacing: 1px;
-			}
-
-			.high-score-value {
-				color: #64ffda;
-				font-weight: bold;
-				font-size: 1.8rem;
-			}
-
-			.menu-container {
-				display: flex;
-				flex-direction: column;
-				gap: 20px;
-				min-width: 300px;
-			}
-
-			.menu-section {
-				background: rgba(26, 35, 50, 0.9);
-				border: 3px solid #1e3a8a;
-				border-radius: 8px;
-				padding: 30px;
-				backdrop-filter: blur(10px);
-			}
-
-			.section-title {
-				font-size: 1.8rem;
-				color: #00e676;
-				margin-bottom: 20px;
-				text-transform: uppercase;
-				letter-spacing: 2px;
-				border-bottom: 2px solid #00e676;
-				padding-bottom: 10px;
-			}
-
-			.menu-button {
-				display: block;
-				width: 100%;
-				padding: 15px 30px;
-				margin-bottom: 15px;
-				background: #1976d2;
-				color: #fff;
-				border: none;
-				border-radius: 5px;
-				font-family: 'Jersey 10', monospace;
-				font-size: 1.2rem;
-				font-weight: bold;
-				text-transform: uppercase;
-				letter-spacing: 1px;
-				cursor: pointer;
-				transition: all 0.2s ease;
-				text-decoration: none;
-				text-align: center;
-				box-shadow: 0 2px 8px rgba(25, 118, 210, 0.3);
-			}
-
-			.menu-button:hover {
-				background: #1565c0;
-				transform: translateY(-2px);
-				box-shadow: 0 4px 12px rgba(25, 118, 210, 0.4);
-			}
-
-			.menu-button.secondary {
-				background: #00838f;
-				box-shadow: 0 2px 8px rgba(0, 131, 143, 0.3);
-			}
-
-			.menu-button.secondary:hover {
-				background: #00695c;
-				box-shadow: 0 4px 12px rgba(0, 131, 143, 0.4);
-			}
-
-			.menu-button.tertiary {
-				background: #2e7d32;
-				box-shadow: 0 2px 8px rgba(46, 125, 50, 0.3);
-			}
-
-			.menu-button.tertiary:hover {
-				background: #1b5e20;
-				box-shadow: 0 4px 12px rgba(46, 125, 50, 0.4);
-			}
-
-			/* Modal Styles */
-			.modal {
-				display: none;
-				position: fixed;
-				z-index: 1000;
-				left: 0;
-				top: 0;
-				width: 100%;
-				height: 100%;
-				background-color: rgba(0, 0, 0, 0.8);
-				backdrop-filter: blur(5px);
-			}
-
-			.modal.active {
-				display: flex;
-				align-items: center;
-				justify-content: center;
-				animation: modalFadeIn 0.3s ease;
-			}
-
-			.modal-content {
-				background: linear-gradient(135deg, #0f1419, #1a2332);
-				border: 3px solid #00e676;
-				border-radius: 10px;
-				padding: 30px;
-				max-width: 600px;
-				width: 90%;
-				max-height: 80vh;
-				overflow-y: auto;
-				position: relative;
-				box-shadow: 0 10px 30px rgba(0, 230, 118, 0.3);
-				animation: modalSlideIn 0.3s ease;
-			}
-
-			.modal-header {
-				display: flex;
-				justify-content: space-between;
-				align-items: center;
-				margin-bottom: 25px;
-				padding-bottom: 15px;
-				border-bottom: 2px solid #00e676;
-			}
-
-			.modal-title {
-				font-family: 'Retro Font', 'Jersey 10', monospace;
-				font-size: 2rem;
-				color: #00e676;
-				text-transform: uppercase;
-				letter-spacing: 2px;
-				margin: 0;
-			}
-
-			.close-btn {
-				background: #1976d2;
-				color: #fff;
-				border: none;
-				border-radius: 50%;
-				width: 40px;
-				height: 40px;
-				font-size: 1.5rem;
-				cursor: pointer;
-				transition: all 0.2s ease;
-				display: flex;
-				align-items: center;
-				justify-content: center;
-				box-shadow: 0 2px 8px rgba(25, 118, 210, 0.3);
-			}
-
-			.close-btn:hover {
-				background: #1565c0;
-				transform: scale(1.1);
-				box-shadow: 0 4px 12px rgba(25, 118, 210, 0.4);
-			}
-
-			.instructions-list {
-				list-style: none;
-				text-align: left;
-				margin: 0;
-				padding: 0;
-			}
-
-			.instructions-list li {
-				padding: 8px 0;
-				color: #e1f5fe;
-				font-size: 1.5rem;
-				border-bottom: 1px solid rgba(100, 255, 218, 0.2);
-				line-height: 1.5;
-			}
-
-			.instructions-list li:before {
-				content: '→ ';
-				color: #00e676;
-				font-weight: bold;
-				margin-right: 8px;
-			}
-
-			.difficulty-subtitle {
-				color: #64ffda;
-				font-size: 1.1rem;
-				margin-bottom: 20px;
-				opacity: 0.9;
-			}
-
-			.difficulty-buttons {
-				display: flex;
-				flex-direction: column;
-				gap: 12px;
-			}
-
-			.difficulty-god {
-				background: #7b1fa2;
-				box-shadow: 0 2px 8px rgba(123, 31, 162, 0.3);
-			}
-
-			.difficulty-god:hover {
-				background: #6a1b9a;
-				box-shadow: 0 4px 12px rgba(123, 31, 162, 0.4);
-			}
-
-			.settings-item {
-				display: flex;
-				justify-content: space-between;
-				align-items: center;
-				padding: 15px 0;
-				border-bottom: 1px solid rgba(100, 255, 218, 0.2);
-				font-size: 1.2rem;
-				color: #e1f5fe;
-			}
-
-			.settings-item:last-child {
-				border-bottom: none;
-			}
-
-			.toggle-switch {
-				position: relative;
-				width: 60px;
-				height: 30px;
-				background: #1a2332;
-				border: 2px solid #1e3a8a;
-				border-radius: 15px;
-				cursor: pointer;
-				transition: all 0.3s ease;
-			}
-
-			.toggle-switch.active {
-				background: #00e676;
-				border-color: #00e676;
-			}
-
-			.toggle-switch::after {
-				content: '';
-				position: absolute;
-				top: 3px;
-				left: 3px;
-				width: 20px;
-				height: 20px;
-				background: #64ffda;
-				border-radius: 50%;
-				transition: all 0.3s ease;
-			}
-
-			.toggle-switch.active::after {
-				transform: translateX(26px);
-				background: #fff;
-			}
-
-			.modal-footer {
-				margin-top: 25px;
-				padding-top: 15px;
-				border-top: 1px solid rgba(100, 255, 218, 0.2);
-				text-align: center;
-			}
-
-			@keyframes modalFadeIn {
-				from {
-					opacity: 0;
-				}
-				to {
-					opacity: 1;
-				}
-			}
-
-			@keyframes modalSlideIn {
-				from {
-					transform: translateY(-50px);
-					opacity: 0;
-				}
-				to {
-					transform: translateY(0);
-					opacity: 1;
-				}
-			}
-
-			/* Game Screen */
-			.game-screen {
-				display: none;
-				flex-direction: column;
-				align-items: center;
-				min-height: 100vh;
-				padding: 20px;
-			}
-
-			.game-screen.active {
-				display: flex;
-			}
-
-			.game-header {
-				display: flex;
-				justify-content: space-between;
-				align-items: center;
-				width: 100%;
-				max-width: 1280px;
-				margin-bottom: 20px;
-				padding: 0 20px;
-			}
-
-			.game-logo {
-				font-size: 2rem;
-				color: #00e676;
-				font-weight: bold;
-				text-transform: uppercase;
-				font-family: 'Retro Font', 'Jersey 10', monospace;
-				letter-spacing: 4px;
-				text-shadow:
-					2px 2px 0 #000,
-					4px 4px 0 #1b5e20;
-			}
-
-			.game-controls {
-				display: flex;
-				gap: 15px;
-			}
-
-			.control-btn {
-				padding: 10px 20px;
-				background: #1a2332;
-				color: #64ffda;
-				border: 2px solid #1e3a8a;
-				border-radius: 5px;
-				cursor: pointer;
-				font-family: 'Jersey 10', monospace;
-				font-size: 1rem;
-				transition: all 0.2s ease;
-				box-shadow: 0 2px 8px rgba(30, 58, 138, 0.3);
-			}
-
-			.control-btn:hover {
-				background: #1e3a8a;
-				color: #fff;
-				box-shadow: 0 4px 12px rgba(30, 58, 138, 0.4);
-			}
-
-			.control-btn .fullscreen-icon {
-				display: inline-block;
-				vertical-align: middle;
-				margin-right: 6px;
-			}
-
-			.control-btn.primary {
-				background: #1976d2;
-				border-color: #1976d2;
-				color: #fff;
-				box-shadow: 0 2px 8px rgba(25, 118, 210, 0.3);
-			}
-
-			.control-btn.primary:hover {
-				background: #1565c0;
-				border-color: #1565c0;
-				box-shadow: 0 4px 12px rgba(25, 118, 210, 0.4);
-			}
-
-			.game-container {
-				background: #0f1419;
-				border: 4px solid #1e3a8a;
-				border-radius: 8px;
-				padding: 8px;
-				box-shadow: 0 8px 32px rgba(30, 58, 138, 0.4);
-				position: relative;
-				overflow: hidden;
-			}
-
-			.game-container::before {
-				content: '';
-				position: absolute;
-				top: 0;
-				left: 0;
-				right: 0;
-				bottom: 0;
-				background: repeating-linear-gradient(
-					0deg,
-					transparent,
-					transparent 2px,
-					rgba(0, 230, 118, 0.05) 2px,
-					rgba(0, 230, 118, 0.05) 4px
-				);
-				pointer-events: none;
-				z-index: 10;
-			}
-
-			#app {
-				display: block;
-				border-radius: 4px;
-				image-rendering: pixelated;
-				image-rendering: -moz-crisp-edges;
-				image-rendering: crisp-edges;
-			}
-
-			/* Responsive */
-			@media (max-width: 768px) {
-				.game-title {
-					font-size: 3rem;
-				}
-
-				.menu-container {
-					min-width: 280px;
-				}
-
-				.landing-screen {
-					padding: 20px 10px;
-				}
-			}
-
-			/* Fullscreen styles */
-			.fullscreen-canvas {
-				position: fixed !important;
-				top: 0 !important;
-				left: 0 !important;
-				width: 100vw !important;
-				height: 100vh !important;
-				z-index: 9999 !important;
-				object-fit: contain !important;
-			}
-		</style>
-
 		<!-- Landing Screen -->
 		<div class="landing-screen" id="landing-screen">
 			<h1 class="game-title">Yakitsku</h1>
 			<p class="game-subtitle">
-				Type words to help your avatar kill monsters and achieve the
-				highest score!
+				Type the word to strike. Every correct key shoves the monster
+				back — mistype and it closes in.
 			</p>
 
-			<!-- High Score Display -->
 			<div class="high-score-display" id="high-score-display">
 				<span class="high-score-label">Best Score:</span>
 				<span class="high-score-value" id="high-score-value">0</span>
@@ -554,25 +45,42 @@
 				<div class="menu-section">
 					<h2 class="section-title">Menu</h2>
 					<button class="menu-button" id="start-game-btn">
-						🎮 Start Game
+						▶ Start Game
 					</button>
 					<button class="menu-button tertiary" id="how-to-play-btn">
 						📖 How to Play
 					</button>
 					<button class="menu-button tertiary" id="settings-btn">
-						⚙️ Settings
+						⚙ Settings
 					</button>
+				</div>
+
+				<div class="menu-section records">
+					<h2 class="section-title">Records</h2>
+					<table class="records-table">
+						<thead>
+							<tr>
+								<th scope="col">Mode</th>
+								<th scope="col">Score</th>
+								<th scope="col">WPM</th>
+								<th scope="col">Combo</th>
+								<th scope="col">Runs</th>
+							</tr>
+						</thead>
+						<tbody id="records-body"></tbody>
+					</table>
+					<p class="totals" id="totals-line"></p>
 				</div>
 			</div>
 		</div>
 
 		<!-- Game Screen -->
-		<div class="game-screen" id="game-screen">
+		<div class="game-screen hidden" id="game-screen">
 			<div class="game-header">
 				<div class="game-logo">Yakitsku</div>
 				<div class="game-controls">
 					<button class="control-btn" id="back-to-menu-btn">
-						← Back to Menu
+						← Menu
 					</button>
 					<button class="control-btn primary" id="fullscreen-btn">
 						<svg
@@ -589,33 +97,54 @@
 					</button>
 				</div>
 			</div>
+			<p class="key-hint">
+				Type the word · <kbd>Backspace</kbd> to fix · <kbd>Esc</kbd> to
+				pause
+			</p>
 			<div class="game-container">
 				<div id="app"></div>
 			</div>
 		</div>
 
-		<!-- How to Play Modal -->
-		<div class="modal" id="how-to-play-modal">
+		<!-- How to Play -->
+		<div
+			class="modal"
+			id="how-to-play-modal"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="howto-title">
 			<div class="modal-content">
 				<div class="modal-header">
-					<h2 class="modal-title">How to Play</h2>
+					<h2 class="modal-title" id="howto-title">How to Play</h2>
 					<button class="close-btn" data-modal="how-to-play-modal">
-						✗
+						✕
 					</button>
 				</div>
 				<ul class="instructions-list">
+					<li>Type the word shown to strike the monster.</li>
 					<li>
-						Type words that appear on screen to eliminate monsters
+						Every correct key knocks the monster back — fast typing
+						buys you real time.
 					</li>
-					<li>On mistake, enemies speed up</li>
-					<li>On word combos, you level up and enemies speed up</li>
-					<li>Don't let monsters reach your avatar</li>
-					<li>You have 3 lives to achieve the highest score</li>
-					<li>Use ESC to pause during gameplay</li>
+					<li>
+						A wrong letter turns red. Backspace it out before you
+						can finish the word.
+					</li>
+					<li>
+						Words get longer and monsters get faster each level. The
+						pace is always beatable — it's a skill check, not a
+						lottery.
+					</li>
+					<li>Chain perfect words for a combo multiplier.</li>
+					<li>
+						Mistakes make the monster surge. Lose a life if it
+						reaches you. Run out and the run ends.
+					</li>
+					<li>Press <kbd>Esc</kbd> to pause at any time.</li>
 				</ul>
 				<div class="modal-footer">
 					<button
-						class="menu-button tertiary close-modal-btn"
+						class="menu-button tertiary"
 						data-modal="how-to-play-modal">
 						Close
 					</button>
@@ -623,64 +152,97 @@
 			</div>
 		</div>
 
-		<!-- Difficulty Selection Modal -->
-		<div class="modal" id="difficulty-modal">
+		<!-- Difficulty -->
+		<div
+			class="modal"
+			id="difficulty-modal"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="difficulty-title">
 			<div class="modal-content">
 				<div class="modal-header">
-					<h2 class="modal-title">Choose Difficulty</h2>
+					<h2 class="modal-title" id="difficulty-title">
+						Choose Difficulty
+					</h2>
 					<button class="close-btn" data-modal="difficulty-modal">
-						✗
+						✕
 					</button>
 				</div>
-				<p class="difficulty-subtitle">Initial speed of gameplay</p>
+				<p class="difficulty-subtitle">
+					Higher modes give you less time per letter and fewer lives.
+				</p>
 				<div class="difficulty-buttons">
 					<button
 						class="menu-button difficulty-btn"
 						data-difficulty="easy">
-						Easy
+						Easy — 4 lives
 					</button>
 					<button
 						class="menu-button difficulty-btn"
 						data-difficulty="medium">
-						Medium
+						Medium — 3 lives
 					</button>
 					<button
 						class="menu-button difficulty-btn"
 						data-difficulty="hard">
-						Hard
+						Hard — 2 lives
 					</button>
 					<button
 						class="menu-button difficulty-btn difficulty-god"
 						data-difficulty="i-am-god">
-						I am God
+						I am God — 1 life
 					</button>
 				</div>
 			</div>
 		</div>
 
-		<!-- Settings Modal -->
-		<div class="modal" id="settings-modal">
+		<!-- Settings -->
+		<div
+			class="modal"
+			id="settings-modal"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="settings-title">
 			<div class="modal-content">
 				<div class="modal-header">
-					<h2 class="modal-title">Settings</h2>
+					<h2 class="modal-title" id="settings-title">Settings</h2>
 					<button class="close-btn" data-modal="settings-modal">
-						✗
+						✕
 					</button>
 				</div>
 				<div class="settings-item">
-					<span>Sound Effects</span>
-					<div class="toggle-switch active" id="sound-toggle"></div>
+					<span>Sound effects</span>
+					<button
+						class="toggle-switch active"
+						id="sound-toggle"
+						role="switch"
+						aria-checked="true"
+						aria-label="Sound effects"></button>
 				</div>
 				<div class="settings-item">
-					<span>Background Music</span>
-					<div class="toggle-switch active" id="music-toggle"></div>
+					<span>Music</span>
+					<button
+						class="toggle-switch active"
+						id="music-toggle"
+						role="switch"
+						aria-checked="true"
+						aria-label="Music"></button>
+				</div>
+				<div class="settings-item">
+					<span>Screen shake</span>
+					<button
+						class="toggle-switch active"
+						id="shake-toggle"
+						role="switch"
+						aria-checked="true"
+						aria-label="Screen shake"></button>
 				</div>
 				<div class="modal-footer">
 					<button class="menu-button secondary" id="reset-data-btn">
-						🔄 Reset Game Data
+						🗑 Reset Scores
 					</button>
 					<button
-						class="menu-button tertiary close-modal-btn"
+						class="menu-button tertiary"
 						data-modal="settings-modal">
 						Close
 					</button>
@@ -689,269 +251,5 @@
 		</div>
 
 		<script type="module" src="/src/main.ts"></script>
-		<script>
-			document.addEventListener('DOMContentLoaded', () => {
-				const landingScreen = document.getElementById('landing-screen')
-				const gameScreen = document.getElementById('game-screen')
-				const startGameBtn = document.getElementById('start-game-btn')
-				const backToMenuBtn =
-					document.getElementById('back-to-menu-btn')
-				const fullscreenBtn = document.getElementById('fullscreen-btn')
-				const resetDataBtn = document.getElementById('reset-data-btn')
-				const howToPlayBtn = document.getElementById('how-to-play-btn')
-				const settingsBtn = document.getElementById('settings-btn')
-				const howToPlayModal =
-					document.getElementById('how-to-play-modal')
-				const settingsModal = document.getElementById('settings-modal')
-				const difficultyModal =
-					document.getElementById('difficulty-modal')
-				const highScoreValue =
-					document.getElementById('high-score-value')
-
-				// Settings toggles
-				const soundToggle = document.getElementById('sound-toggle')
-				const musicToggle = document.getElementById('music-toggle')
-				const fpsToggle = document.getElementById('fps-toggle')
-
-				// Load and display high score
-				function loadHighScore() {
-					try {
-						const saveData = localStorage.getItem('yatiksu-save-v1')
-						if (saveData) {
-							const data = JSON.parse(saveData)
-							if (highScoreValue) {
-								highScoreValue.textContent = data.bestScore || 0
-							}
-						}
-					} catch (e) {
-						console.error('Error loading high score:', e)
-						if (highScoreValue) {
-							highScoreValue.textContent = '0'
-						}
-					}
-				}
-
-				// Load high score on page load
-				loadHighScore()
-
-				// Current active modal
-				let activeModal = null
-
-				// Screen switching
-				function showGameScreen(difficulty = 'medium') {
-					landingScreen.classList.add('hidden')
-					gameScreen.classList.add('active')
-
-					// Trigger game start with difficulty
-					const event = new CustomEvent('startGame', {
-						detail: { difficulty },
-					})
-					window.dispatchEvent(event)
-				}
-
-				function showLandingScreen() {
-					landingScreen.classList.remove('hidden')
-					gameScreen.classList.remove('active')
-
-					// Reload high score when returning to menu
-					loadHighScore()
-
-					// Trigger return to menu
-					const event = new CustomEvent('returnToMenu')
-					window.dispatchEvent(event)
-				}
-
-				// Modal functions
-				function openModal(modal) {
-					if (modal) {
-						// Close any existing modal first
-						closeAllModals()
-
-						modal.classList.add('active')
-						activeModal = modal
-						document.body.style.overflow = 'hidden'
-					}
-				}
-
-				function closeModal(modal) {
-					if (modal) {
-						modal.classList.remove('active')
-						if (activeModal === modal) {
-							activeModal = null
-						}
-						document.body.style.overflow = 'auto'
-					}
-				}
-
-				function closeAllModals() {
-					;[howToPlayModal, settingsModal, difficultyModal].forEach(
-						(modal) => {
-							if (modal) {
-								closeModal(modal)
-							}
-						},
-					)
-				}
-
-				// Event listeners
-				if (startGameBtn) {
-					startGameBtn.addEventListener('click', () => {
-						openModal(difficultyModal)
-					})
-				}
-
-				// Difficulty selection
-				document.querySelectorAll('.difficulty-btn').forEach((btn) => {
-					btn.addEventListener('click', () => {
-						const difficulty = btn.getAttribute('data-difficulty')
-						closeModal(difficultyModal)
-						showGameScreen(difficulty)
-					})
-				})
-
-				if (backToMenuBtn) {
-					backToMenuBtn.addEventListener('click', showLandingScreen)
-				}
-
-				// Settings toggles
-				;[soundToggle, musicToggle, fpsToggle].forEach((toggle) => {
-					if (toggle) {
-						toggle.addEventListener('click', () => {
-							toggle.classList.toggle('active')
-							// TODO: Implement actual settings logic
-						})
-					}
-				})
-
-				// Reset game data
-				if (resetDataBtn) {
-					resetDataBtn.addEventListener('click', () => {
-						if (
-							confirm(
-								'Are you sure you want to reset all game data? This will delete your high scores and settings.',
-							)
-						) {
-							localStorage.clear()
-							loadHighScore() // Refresh display
-						}
-					})
-				}
-
-				// How to Play modal
-				if (howToPlayBtn) {
-					howToPlayBtn.addEventListener('click', () => {
-						openModal(howToPlayModal)
-					})
-				}
-
-				// Settings modal
-				if (settingsBtn) {
-					settingsBtn.addEventListener('click', () => {
-						openModal(settingsModal)
-					})
-				}
-
-				// Close modal buttons using event delegation
-				document.addEventListener('click', (e) => {
-					if (
-						e.target.classList.contains('close-btn') ||
-						e.target.classList.contains('close-modal-btn')
-					) {
-						const modalId = e.target.getAttribute('data-modal')
-						if (modalId) {
-							const modal = document.getElementById(modalId)
-							closeModal(modal)
-						} else {
-							// Fallback: close all modals
-							closeAllModals()
-						}
-					}
-				})
-
-				// Close modal when clicking outside
-				;[howToPlayModal, settingsModal, difficultyModal].forEach(
-					(modal) => {
-						if (modal) {
-							modal.addEventListener('click', (e) => {
-								if (e.target === modal) {
-									closeModal(modal)
-								}
-							})
-						}
-					},
-				)
-
-				// Enhanced ESC key handling
-				document.addEventListener('keydown', (e) => {
-					if (e.key === 'Escape') {
-						// If we're in the landing screen and there's an active modal, close it
-						if (
-							!gameScreen.classList.contains('active') &&
-							activeModal
-						) {
-							closeModal(activeModal)
-							e.preventDefault()
-							e.stopPropagation()
-						}
-						// Don't handle ESC in game screen - let Phaser handle it
-					}
-				})
-
-				// Fullscreen functionality
-				const getCanvas = () => document.querySelector('#app canvas')
-
-				const setFullscreenLabel = (text) => {
-					const label =
-						fullscreenBtn?.querySelector('.fullscreen-label')
-					if (label) label.textContent = text
-				}
-
-				if (fullscreenBtn) {
-					fullscreenBtn.addEventListener('click', async () => {
-						const canvas = getCanvas()
-						if (!canvas) return
-
-						try {
-							if (!document.fullscreenElement) {
-								await canvas.requestFullscreen()
-								canvas.classList.add('fullscreen-canvas')
-								setFullscreenLabel('Exit Fullscreen')
-							} else {
-								await document.exitFullscreen()
-								canvas.classList.remove('fullscreen-canvas')
-								setFullscreenLabel('Fullscreen')
-							}
-						} catch (err) {
-							console.error('Fullscreen error:', err)
-						}
-					})
-				}
-
-				// Handle fullscreen changes
-				document.addEventListener('fullscreenchange', () => {
-					const canvas = getCanvas()
-					if (!canvas) return
-
-					if (!document.fullscreenElement) {
-						canvas.classList.remove('fullscreen-canvas')
-						setFullscreenLabel('Fullscreen')
-					} else {
-						canvas.classList.add('fullscreen-canvas')
-						setFullscreenLabel('Exit Fullscreen')
-					}
-				})
-
-				// Update high score when game ends (listen for custom event)
-				window.addEventListener('gameScoreUpdate', (e) => {
-					if (
-						highScoreValue &&
-						e.detail &&
-						e.detail.score !== undefined
-					) {
-						loadHighScore() // Reload from localStorage to get the latest
-					}
-				})
-			})
-		</script>
 	</body>
 </html>

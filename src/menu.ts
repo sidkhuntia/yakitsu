@@ -171,9 +171,17 @@ export function initMenu(): void {
 	})
 
 	// --- flow --------------------------------------------------------------
-	el('start-game-btn')?.addEventListener('click', () =>
-		showModal(difficultyModal),
-	)
+	// Both entry points share the difficulty modal; this records which mode
+	// the chosen difficulty is for.
+	let mode: 'runner' | 'duel' = 'runner'
+	el('start-game-btn')?.addEventListener('click', () => {
+		mode = 'runner'
+		showModal(difficultyModal)
+	})
+	el('start-duel-btn')?.addEventListener('click', () => {
+		mode = 'duel'
+		showModal(difficultyModal)
+	})
 
 	document.querySelectorAll<HTMLElement>('.difficulty-btn').forEach((btn) => {
 		btn.addEventListener('click', () => {
@@ -181,7 +189,7 @@ export function initMenu(): void {
 				(btn.dataset.difficulty as DifficultyId) ?? 'medium'
 			closeAllModals()
 			window.dispatchEvent(
-				new CustomEvent('startGame', { detail: { difficulty } }),
+				new CustomEvent('startGame', { detail: { difficulty, mode } }),
 			)
 		})
 	})

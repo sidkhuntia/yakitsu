@@ -1,6 +1,7 @@
 import Phaser from 'phaser'
 import Boot from './scenes/Boot'
 import Play from './scenes/Play'
+import Duel from './scenes/Duel'
 import { initMenu } from './menu'
 import './style.css'
 
@@ -25,7 +26,7 @@ const config: Phaser.Types.Core.GameConfig = {
 	// No Arcade physics: collision is explicit AABB in the Play scene, which
 	// avoids the scale/offset interaction that made the old hitboxes a guessing
 	// game.
-	scene: [Boot, Play],
+	scene: [Boot, Play, Duel],
 }
 
 const game = new Phaser.Game(config)
@@ -37,6 +38,11 @@ const game = new Phaser.Game(config)
  */
 let assetsReady = false
 let pendingDifficulty: string | null = null
+let pendingMode: GameMode = 'runner'
+
+/** Which scene a run starts: the original runner, or the duel prototype. */
+type GameMode = 'runner' | 'duel'
+const SCENE_FOR: Record<GameMode, string> = { runner: 'Play', duel: 'Duel' }
 
 // Registered synchronously after the Game is constructed, so it is always in
 // place before Boot reaches create().
@@ -45,7 +51,7 @@ game.events.on('yk-assets-ready', () => {
 	if (pendingDifficulty) {
 		const d = pendingDifficulty
 		pendingDifficulty = null
-		startRun(d)
+		startRun(d, pendingMode)
 	}
 })
 
@@ -99,11 +105,15 @@ function refreshHighScore(): void {
 }
 
 /** Boot a run at the given difficulty, always from a clean scene. */
-function startRun(difficulty: string): void {
+function startRun(difficulty: string, mode: GameMode = 'runner'): void {
 	game.registry.set('difficulty', difficulty)
-	const play = game.scene.getScene('Play')
-	if (play?.scene.isActive()) play.scene.restart()
-	else game.scene.start('Play')
+	const key = SCENE_FOR[mode]
+	for (const other of Object.values(SCENE_FOR)) {
+		if (other !== key && game.scene.isActive(other)) game.scene.stop(other)
+	}
+	const scene = game.scene.getScene(key)
+	if (scene?.scene.isActive()) scene.scene.restart()
+	else game.scene.start(key)
 }
 
 function getCanvas(): HTMLCanvasElement | null {
@@ -229,24 +239,28 @@ window.addEventListener('DOMContentLoaded', () => {
 	// The inline menu script in index.html dispatches these once the player has
 	// chosen a difficulty.
 	window.addEventListener('startGame', (e) => {
-		const detail = (e as CustomEvent<{ difficulty?: string }>).detail
+		const detail = (
+			e as CustomEvent<{ difficulty?: string; mode?: GameMode }>
+		).detail
 		const difficulty = detail?.difficulty ?? 'medium'
+		const mode: GameMode = detail?.mode === 'duel' ? 'duel' : 'runner'
 
 		setScreen('landing-screen', false)
 		setScreen('game-screen', true)
 
 		if (!assetsReady) {
 			pendingDifficulty = difficulty
+			pendingMode = mode
 			return
 		}
-		startRun(difficulty)
+		startRun(difficulty, mode)
 	})
 
 	window.addEventListener('returnToMenu', () => {
 		if (document.fullscreenElement)
 			void document.exitFullscreen().catch(() => {})
 
-		for (const key of ['Play']) {
+		for (const key of Object.values(SCENE_FOR)) {
 			const s = game.scene.getScene(key)
 			if (s?.scene.isActive()) game.scene.stop(key)
 		}
@@ -262,9 +276,9 @@ window.addEventListener('DOMContentLoaded', () => {
 
 	// Alt-tabbing away and coming back to a dead avatar is never fair.
 	window.addEventListener('blur', () => {
-		const play = game.scene.getScene('Play') as Play | undefined
-		if (play?.scene.isActive() && !play.scene.isPaused()) {
-			game.events.emit('yk-autopause')
-		}
+		const running = Object.values(SCENE_FOR).some((key) =>
+			game.scene.isActive(key),
+		)
+		if (running) game.events.emit('yk-autopause')
 	})
 })

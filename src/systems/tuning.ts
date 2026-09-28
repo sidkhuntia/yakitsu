@@ -67,6 +67,22 @@ export const TUNING = {
 	minBudgetMs: 1150,
 
 	/**
+	 * Budget multiplier applied *each* time the monster reaches you mid-word.
+	 *
+	 * The retry keeps the same word, so the cost of a hit is a tighter clock
+	 * rather than a fresh word plus a lost life. Previously `takeHit` re-dealt a
+	 * random word, which taxed the player three times over (life, combo, and
+	 * the progress on a word they could already read).
+	 */
+	retryBudgetPenalty: 0.85,
+	/**
+	 * Floor on the stacked retry multiplier. Without it, a long streak of hits
+	 * on a long word would eventually demand an impossible typing speed, which
+	 * is exactly the failure mode the fairness tests exist to prevent.
+	 */
+	retryBudgetPenaltyFloor: 0.45,
+
+	/**
 	 * Per-level decay applied to msPerChar. 0.985^n means the pace tightens
 	 * smoothly and reaches the floor (0.5) around level 47.
 	 */
@@ -86,17 +102,46 @@ export const TUNING = {
 	 * Pixels the monster is shoved backwards per correct keystroke.
 	 * This is what makes typing feel like a weapon rather than a timer.
 	 *
+	 * The shove is a *bank*, not a spring: it does not bleed off. It survives
+	 * until the monster dies, then converts to score via `timeBankMultiplier`.
+	 *
+	 * The previous model bled 110px/second while granting 14px/key. That put the
+	 * break-even typing rate at 7.9 keys/sec (~94 WPM), so for anyone below that
+	 * — i.e. most players — the accumulated shove decayed to zero faster than it
+	 * was ever built. The "typing is your weapon" fantasy was not present in the
+	 * simulation at all.
+	 *
 	 * Bounded by design: the monster's position is
 	 * `spawn - travel - knockback`, and travel always accumulates, so a capped
-	 * knockback can delay the monster but can never stall it. At the default cap
-	 * that headroom is ~12% of the crossing, which rewards fast typing without
-	 * letting a fast typist stall the run indefinitely.
+	 * knockback can delay the monster but can never stall it. At the cap below
+	 * that headroom is 33% of the crossing, so a strong run visibly buys time
+	 * without letting a fast typist stall out.
 	 */
-	knockbackPx: 14,
-	/** Hard cap on accumulated knockback. */
-	maxKnockbackPx: 150,
-	/** Knockback bleeds off this fast, so it reads as a shove, not a wall. */
-	knockbackDecayPerSec: 110,
+	knockbackPx: 36,
+	/**
+	 * Hard cap on banked knockback. Below `travelDistance` so it cannot stall.
+	 *
+	 * 480/36 = 13 keystrokes, so any word up to 13 characters banks its full
+	 * shove and never touches the cap. Past that the cap deliberately truncates:
+	 * an unbounded shove on a 20-letter word would let a patient typist stall the
+	 * run outright.
+	 *
+	 * The grant is set so that even the *worst* case in the game — a 4-letter
+	 * word on I am God, where the monster is fastest — still banks more than a
+	 * sixth of a second of travel. Below ~36px/key the payout was effectively
+	 * invisible on short words, because the fixed reaction allowance dominates a
+	 * short word's budget and dilutes the shove.
+	 */
+	maxKnockbackPx: 480,
+	/**
+	 * Score bonus per *second* of travel the player pushed back, and the ceiling
+	 * on that bonus. Scored in seconds rather than pixels so the reward means
+	 * the same thing on a 3-letter word and a 12-letter one.
+	 */
+	timeBankBonusPerSec: 0.5,
+	timeBankBonusCap: 0.6,
+	/** Seconds of banked shove before the HUD readout appears. */
+	timeBankShowThreshold: 0.15,
 
 	/** Multiplier spike applied to speed for 450ms after a mistype. */
 	mistakeSpeedSpike: 1.18,
@@ -196,4 +241,36 @@ export function budgetMsFor(
  */
 export function speedForBudget(budgetMs: number): number {
 	return TUNING.travelDistance / (budgetMs / 1000)
+}
+
+/**
+ * Budget after stacking `retreats` mid-word hits.
+ *
+ * Kept as a pure function so the "still winnable after a hit" invariant can be
+ * asserted directly rather than inferred from the scene.
+ */
+export function retryBudgetFactor(retreats: number): number {
+	const stacked = Math.pow(TUNING.retryBudgetPenalty, Math.max(0, retreats))
+	return Math.max(TUNING.retryBudgetPenaltyFloor, stacked)
+}
+
+/**
+ * Score multiplier earned by how far the player pushed the monster back.
+ *
+ * @param knockbackPx  banked shove at the moment of the kill
+ * @param speedPxPerSec  the monster's speed for this word
+ */
+export function timeBankMultiplier(
+	knockbackPx: number,
+	speedPxPerSec: number,
+): number {
+	if (knockbackPx <= 0 || speedPxPerSec <= 0) return 1
+	const bankedSec = knockbackPx / speedPxPerSec
+	return (
+		1 +
+		Math.min(
+			TUNING.timeBankBonusCap,
+			bankedSec * TUNING.timeBankBonusPerSec,
+		)
+	)
 }

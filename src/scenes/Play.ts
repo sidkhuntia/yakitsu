@@ -6,6 +6,7 @@ import { Juice } from '../systems/Juice'
 import { Hud, Particles } from '../systems/Hud'
 import { WordDisplay } from '../systems/WordDisplay'
 import { Monster, MONSTER_TYPES, type MonsterType } from '../systems/Monster'
+import { bodyFont, displayFont } from '../systems/font'
 import { SettingsModal } from '../systems/SettingsModal'
 import { GameOverModal, type GameOverSummary } from '../systems/GameOverModal'
 import {
@@ -83,6 +84,8 @@ export default class Play extends Phaser.Scene {
 
 	/** Coach line, shown only for the first few words of a run. */
 	private tipText!: Phaser.GameObjects.Text
+	/** Live "time bought back" readout for the current word. */
+	private timeBankText!: Phaser.GameObjects.Text
 	private countdownLabel?: Phaser.GameObjects.Text
 
 	/** How many words into the run we are still showing hints. */
@@ -157,7 +160,14 @@ export default class Play extends Phaser.Scene {
 
 		this.settings = loadData().settings
 		this.bank = new WordBank(window.THESAURUS)
-		this.state = new RunState(this.difficulty, this.time.now)
+		// assistLevel was persisted and shown in the settings modal but never
+		// read by gameplay, so the accessibility knob did nothing. It is passed
+		// in now and applied in RunState.speedFor.
+		this.state = new RunState(
+			this.difficulty,
+			this.time.now,
+			this.settings.assistLevel,
+		)
 		this.juice = new Juice(this, this.settings.screenShake)
 		this.particles = new Particles(this)
 
@@ -168,14 +178,28 @@ export default class Play extends Phaser.Scene {
 
 		this.display = new WordDisplay(this)
 		this.hud = new Hud(this, this.difficulty)
+		// The tips are prose the player has to read mid-run, so they follow the
+		// accessibility font rather than the pixel face.
 		this.tipText = this.add
 			.text(this.scale.width / 2, this.scale.height * 0.25 + 58, '', {
-				fontFamily: 'Retro Font',
+				fontFamily: bodyFont(),
 				fontSize: '18px',
 				color: '#8fa3bd',
 			})
 			.setOrigin(0.5)
 			.setDepth(20)
+
+		// Sits just under the word plate. This is the feedback that makes the
+		// shove legible as a resource rather than an invisible stat.
+		this.timeBankText = this.add
+			.text(this.scale.width / 2, this.scale.height * 0.25 + 86, '', {
+				fontFamily: displayFont(),
+				fontSize: '16px',
+				color: '#64ffda',
+			})
+			.setOrigin(0.5)
+			.setDepth(20)
+			.setVisible(false)
 
 		this.setupAudio()
 		this.bindInput()
@@ -345,6 +369,18 @@ export default class Play extends Phaser.Scene {
 		// player is charged for a word they already finished.
 		if (this.engine.isComplete()) return
 
+		/**
+		 * `lockInputOnMistake` ("Strict typing") was persisted and displayed but
+		 * never enforced. When on, a wrong key rejects input until the player
+		 * backspaces it out, so one typo costs real time instead of being
+		 * immediately overwritten by the next keystroke.
+		 */
+		if (this.settings.lockInputOnMistake && this.engine.hasErrors()) {
+			this.juice.shake(0.3, 80)
+			this.playSfx('error')
+			return
+		}
+
 		const correct = this.engine.input(key)
 		this.state.recordKeystroke(correct, this.time.now)
 		this.state.tick(this.time.now)
@@ -366,7 +402,9 @@ export default class Play extends Phaser.Scene {
 	}
 
 	private onCorrectKey(): void {
-		// Typing is the weapon: every correct key shoves the monster back.
+		// Typing is the weapon: every correct key shoves the monster back, and
+		// the shove HOLDS until the kill rather than bleeding away. It is paid
+		// out as score in `completeWord`.
 		this.knockback = Math.min(
 			TUNING.maxKnockbackPx,
 			this.knockback + TUNING.knockbackPx,
@@ -390,10 +428,16 @@ export default class Play extends Phaser.Scene {
 		const progress = this.monsterProgress()
 		const nearMiss = progress >= 1 - TUNING.nearMissFraction
 
+		// The shove still on the monster is read BEFORE it is destroyed, and is
+		// paid out as score by `completeWord`. This is the mechanic that makes
+		// "hold it off" worth points rather than just surviving.
+		const bankedShove = this.knockback
+
 		const result = this.state.completeWord(
 			word.length,
 			this.engine.getMistakes(),
 			nearMiss,
+			bankedShove,
 		)
 		this.setTip('')
 
@@ -430,9 +474,18 @@ export default class Play extends Phaser.Scene {
 		// typists and broke their rhythm at exactly the moment they were
 		// flowing. The kill feedback (hitstop, particles, floating score) is
 		// already carrying the "you landed it" message.
-		this.display.celebrate()
 		this.dealWord()
-		this.floatScore(burstX, burstY - 90, result.earned, result.perfect)
+		// Celebrate AFTER the new word is dealt. The old code called this first,
+		// and `dealWord` -> `display.setWord` then destroyed the very character
+		// objects the punch tween was targeting, so the "you landed it" flourish
+		// never rendered a single frame.
+		this.display.celebrate()
+		this.floatScore(
+			burstX,
+			burstY - 90,
+			result.earned,
+			result.perfect || result.banked,
+		)
 
 		if (result.levelledUp) this.onLevelUp()
 		this.checkMilestone()
@@ -526,6 +579,28 @@ export default class Play extends Phaser.Scene {
 	}
 
 	/**
+	 * Live readout of how much travel the player has bought back this word.
+	 *
+	 * Only shown once there is something worth showing. Without this the shove
+	 * is an invisible stat the player has no way of learning to think about,
+	 * which is the main reason the previous decay made it feel absent.
+	 */
+	private updateTimeBank(): void {
+		if (this.phase !== 'running' || this.monsterSpeed <= 0) {
+			this.timeBankText.setVisible(false)
+			return
+		}
+		const sec = this.knockback / this.monsterSpeed
+		if (sec < TUNING.timeBankShowThreshold) {
+			this.timeBankText.setVisible(false)
+			return
+		}
+		this.timeBankText
+			.setText(`HELD BACK ${sec.toFixed(1)}s`)
+			.setVisible(true)
+	}
+
+	/**
 	 * Cap how many death animations may overlap.
 	 *
 	 * A fast player kills roughly every 150ms, which is quicker than the death
@@ -571,18 +646,45 @@ export default class Play extends Phaser.Scene {
 			repeat: 3,
 		})
 
-		// Clear the old monster so it can't immediately re-hit.
-		this.monster?.destroy()
-		this.monster = null
-		this.clearPowerUp()
-
 		if (dead) {
 			this.endRun()
 			return
 		}
 
-		// Re-deal so the player is never left mid-word against a new monster.
-		this.dealWord()
+		/**
+		 * Retry the SAME word rather than dealing a new one.
+		 *
+		 * The old build called `dealWord()` here, which charged the player three
+		 * times for a single event: a life, the whole combo, AND the progress on
+		 * a word they had already read. Re-dealing a *different* word is the
+		 * worst of the three, because the retry is now a cold read under time
+		 * pressure.
+		 *
+		 * Instead the monster is shoved back to a fixed distance and the same
+		 * word is re-armed with a tighter clock (see `registerRetreat`), so the
+		 * cost of a hit is time pressure rather than lost progress.
+		 */
+		this.state.registerRetreat()
+		this.setTip('Pushed back — same word, less time')
+		this.reArmSameWord()
+	}
+
+	/**
+	 * Re-arm the current word after a hit.
+	 *
+	 * Keeps the TypingEngine (so the player's caret and any corrected mistakes
+	 * survive) but resets the monster's approach and re-derives its speed from
+	 * the now-shortened budget.
+	 */
+	private reArmSameWord(): void {
+		this.knockback = 0
+		this.travel = 0
+		this.scrollX = 0
+		this.monsterHomeX = this.scale.width + 100
+		this.monsterSpeed = this.state.speedFor(this.engine.getWord())
+		this.dangerSounded = false
+		this.spikeUntil = 0
+		this.spawnMonster(this.pickMonsterType())
 	}
 
 	private endRun(): void {
@@ -609,6 +711,7 @@ export default class Play extends Phaser.Scene {
 
 		this.display.setVisible(false)
 		this.tipText.setVisible(false)
+		this.timeBankText.setVisible(false)
 		this.hud.setVisible(false)
 		this.vignette.setAlpha(0)
 		this.killTransient()
@@ -730,6 +833,7 @@ export default class Play extends Phaser.Scene {
 
 		this.updateAvatarBlink(time)
 		this.updateDanger()
+		this.updateTimeBank()
 		this.updateHud(delta)
 	}
 
@@ -764,10 +868,11 @@ export default class Play extends Phaser.Scene {
 			m.setTint(0x66d9ff)
 		} else {
 			m.clearTint()
-			this.knockback = Math.max(
-				0,
-				this.knockback - TUNING.knockbackDecayPerSec * dt,
-			)
+			// NOTE: knockback is deliberately NOT decayed here. It is a bank that
+			// holds until the monster dies, and is then paid out as score. The old
+			// 110px/sec bleed-out put the break-even typing rate at ~94 WPM, so
+			// below that the accumulated shove decayed faster than it was built
+			// and the mechanic was invisible.
 			const spike =
 				this.time.now < this.spikeUntil ? TUNING.mistakeSpeedSpike : 1
 			this.travel += this.monsterSpeed * spike * dt
@@ -808,8 +913,14 @@ export default class Play extends Phaser.Scene {
 	}
 
 	private updateDanger(): void {
-		if (this.phase !== 'running' || !this.monster) {
+		// showDangerZone was persisted but never read, so the toggle did nothing.
+		if (
+			this.phase !== 'running' ||
+			!this.monster ||
+			!this.settings.showDangerZone
+		) {
 			this.vignette.setAlpha(0)
+			this.display.setDanger(0)
 			return
 		}
 		const gap = Math.max(0, this.monster.x - TUNING.avatarX)
@@ -939,6 +1050,7 @@ export default class Play extends Phaser.Scene {
 		this.hud?.relayout()
 		this.countdownLabel?.setPosition(width / 2, height * 0.25)
 		this.tipText.setPosition(width / 2, height * 0.25 + 58)
+		this.timeBankText.setPosition(width / 2, height * 0.25 + 86)
 		this.monsterHomeX = width + 100
 	}
 
@@ -996,10 +1108,13 @@ export default class Play extends Phaser.Scene {
 		})
 		if (!s.muted) this.bgMusic.play()
 
+		// This loop was created and then never started, so the run ambience was
+		// silent. Play it only when unmuted, matching bgMusic.
 		this.runLoop = this.sound.add('runSound', {
-			volume: s.sfxVolume * 0.22,
+			volume: s.muted ? 0 : s.sfxVolume * 0.22,
 			loop: true,
 		})
+		if (!s.muted) this.runLoop.play()
 
 		const map: Record<string, string> = {
 			type: 'clickSound',
@@ -1045,7 +1160,7 @@ export default class Play extends Phaser.Scene {
 	private applyVolumes(): void {
 		const s = this.settings
 		this.setVolume(this.bgMusic, s.muted ? 0 : s.musicVolume)
-		this.setVolume(this.runLoop, s.sfxVolume * 0.22)
+		this.setVolume(this.runLoop, s.muted ? 0 : s.sfxVolume * 0.22)
 		for (const [key, sfx] of Object.entries(this.sfx)) {
 			this.setVolume(sfx, s.sfxVolume * this.sfxGain(key))
 		}

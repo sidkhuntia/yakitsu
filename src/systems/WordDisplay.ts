@@ -1,5 +1,6 @@
 import Phaser from 'phaser'
 import type { TypingEngine } from './typingEngine'
+import { bodyFont } from './font'
 
 const COL_PENDING = '#ffffff'
 const COL_TYPED = '#00e676'
@@ -57,10 +58,14 @@ export class WordDisplay {
 		this.chars.length = 0
 		this.charWidths = []
 
+		// Resolved per word rather than cached in the constructor, so a change in
+		// the pause menu applies to the next word without a reload.
+		const family = bodyFont()
+
 		for (let i = 0; i < word.length; i++) {
 			const t = this.scene.add
 				.text(0, 0, word[i], {
-					fontFamily: 'Retro Font',
+					fontFamily: family,
 					fontSize: `${this.fontSize}px`,
 					color: COL_PENDING,
 				})

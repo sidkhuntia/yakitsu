@@ -7,9 +7,15 @@ import {
 } from './persistence'
 
 const PANEL_W = 480
-const PANEL_H = 500
 const ROW_H = 46
 const ROWS_TOP = 92
+/**
+ * Derived from the row count rather than hand-tuned, so adding a setting cannot
+ * silently push the action buttons outside the panel.
+ *   rows bottom + hint + button stack (3 x 44) + bottom margin
+ */
+const ROW_COUNT = 7
+const PANEL_H = ROWS_TOP + (ROW_COUNT - 1) * ROW_H + 30 + 60 + 3 * 44 + 28
 /** Vertical gap between the settings rows and the action buttons. */
 const BUTTONS_TOP = 60
 
@@ -77,6 +83,24 @@ export class SettingsModal extends Phaser.GameObjects.Container {
 				assistLevel: s.assistLevel >= 1 ? 0.7 : 1,
 			}),
 			help: 'Slower monsters if you need more time',
+		},
+		{
+			label: () => {
+				const s = loadData().settings
+				return `Readability font: ${s.dyslexicFont ? 'ON' : 'OFF'}`
+			},
+			toggle: (s) => s.dyslexicFont,
+			flip: (s) => ({ dyslexicFont: !s.dyslexicFont }),
+			help: 'A clearer typeface for the words you have to read',
+		},
+		{
+			label: () => {
+				const s = loadData().settings
+				return `Danger zone: ${s.showDangerZone ? 'ON' : 'OFF'}`
+			},
+			toggle: (s) => s.showDangerZone,
+			flip: (s) => ({ showDangerZone: !s.showDangerZone }),
+			help: 'Screen-edge warning as the monster closes in',
 		},
 	]
 

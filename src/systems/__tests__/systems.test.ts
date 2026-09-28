@@ -8,6 +8,7 @@ import {
 	WORD_TIERS,
 	budgetMsFor,
 	levelForWords,
+	speedForBudget,
 	tierForWordsCompleted,
 	type DifficultyId,
 } from '../tuning'
@@ -120,6 +121,54 @@ describe('difficulty fairness', () => {
 	it('scales the time budget with word length', () => {
 		const d = DIFFICULTIES.medium
 		expect(budgetMsFor(12, 1, d)).toBeGreaterThan(budgetMsFor(3, 1, d))
+	})
+
+	/**
+	 * The retry penalty must not be able to produce a budget the player cannot
+	 * physically meet. `takeHit` used to re-deal a fresh word; it now keeps the
+	 * same word with a tighter clock, so this is the invariant that keeps that
+	 * change fair.
+	 */
+	it.each(Object.keys(DIFFICULTIES) as DifficultyId[])(
+		'%s stays winnable at 200 WPM even after repeated hits on one word',
+		(id) => {
+			for (const retreats of [1, 3, 10, 50, 500]) {
+				for (let level = 1; level <= 80; level++) {
+					const words = (level - 1) * TUNING.wordsPerLevel
+					const tier = WORD_TIERS[tierForWordsCompleted(words)]
+					const s = new RunState(DIFFICULTIES[id], 0)
+					for (let r = 0; r < retreats; r++) s.registerRetreat()
+					const budget = s.liveBudgetMsFor('x'.repeat(tier.maxLen))
+					expect(tier.maxLen / (budget / 1000)).toBeLessThan(
+						CPM_200WPM,
+					)
+				}
+			}
+		},
+	)
+
+	it('tightens the clock on each hit but never below the penalty floor', () => {
+		const s = new RunState(DIFFICULTIES.medium, 0)
+		const word = 'MONSTER'
+		const first = s.liveBudgetMsFor(word)
+		s.registerRetreat()
+		const second = s.liveBudgetMsFor(word)
+		expect(second).toBeLessThan(first)
+		for (let i = 0; i < 200; i++) s.registerRetreat()
+		const floored = s.liveBudgetMsFor(word)
+		// Still >= the absolute budget floor, and no longer degrading.
+		expect(floored).toBeGreaterThanOrEqual(TUNING.minBudgetMs)
+		s.registerRetreat()
+		expect(s.liveBudgetMsFor(word)).toBe(floored)
+	})
+
+	it('resets the hit count on a completed word', () => {
+		const s = new RunState(DIFFICULTIES.medium, 0)
+		s.registerRetreat()
+		s.registerRetreat()
+		expect(s.retreats).toBe(2)
+		s.completeWord(6, 0, false)
+		expect(s.retreats).toBe(0)
 	})
 
 	it('floors the budget so very short words stay readable', () => {
@@ -252,6 +301,149 @@ describe('RunState scoring', () => {
 		expect(s.combo).toBe(0)
 		expect(s.wordsCompleted).toBe(1)
 		expect(s.lives).toBe(3)
+	})
+
+	describe('assist', () => {
+		it('defaults to the fair speed', () => {
+			const s = new RunState(DIFFICULTIES.medium, 0)
+			expect(s.speedFor('MONSTER')).toBeCloseTo(
+				TUNING.travelDistance / (s.liveBudgetMsFor('MONSTER') / 1000),
+				5,
+			)
+		})
+
+		it('scales monster speed down at 70% assist', () => {
+			const fair = new RunState(DIFFICULTIES.medium, 0)
+			const assisted = new RunState(DIFFICULTIES.medium, 0, 0.7)
+			expect(assisted.speedFor('MONSTER')).toBeCloseTo(
+				fair.speedFor('MONSTER') * 0.7,
+				5,
+			)
+		})
+
+		it('gives the player proportionally more time, not a relabelled timer', () => {
+			const fair = new RunState(DIFFICULTIES.medium, 0)
+			const assisted = new RunState(DIFFICULTIES.medium, 0, 0.7)
+			const travelFair = TUNING.travelDistance / fair.speedFor('MONSTER')
+			const travelAssisted =
+				TUNING.travelDistance / assisted.speedFor('MONSTER')
+			expect(travelAssisted).toBeGreaterThan(travelFair)
+		})
+
+		it('clamps a corrupt save value into the winnable range', () => {
+			const tooFast = new RunState(DIFFICULTIES.hard, 0, 5)
+			const fair = new RunState(DIFFICULTIES.hard, 0)
+			expect(tooFast.assistLevel).toBe(1)
+			expect(tooFast.speedFor('CAT')).toBeCloseTo(fair.speedFor('CAT'), 5)
+
+			const tooSlow = new RunState(DIFFICULTIES.hard, 0, 0)
+			expect(tooSlow.assistLevel).toBeGreaterThan(0)
+			expect(tooSlow.speedFor('CAT')).toBeLessThan(fair.speedFor('CAT'))
+		})
+	})
+
+	describe('time bank', () => {
+		it('pays more for a bigger shove', () => {
+			const a = fresh().completeWord(6, 0, false, 0).earned
+			const some = fresh().completeWord(6, 0, false, 100).earned
+			const lots = fresh().completeWord(6, 0, false, 200).earned
+			expect(some).toBeGreaterThan(a)
+			expect(lots).toBeGreaterThan(some)
+		})
+
+		it('caps the bonus so it cannot run away', () => {
+			const huge = fresh().completeWord(6, 0, false, 100_000).earned
+			const base = fresh().completeWord(6, 0, false, 0).earned
+			const maxMult = 1 + TUNING.timeBankBonusCap
+			expect(huge / base).toBeLessThanOrEqual(maxMult + 0.01)
+		})
+
+		it('rewards the shove in seconds, so it is comparable across word lengths', () => {
+			// A long word runs at a lower px/sec, so the same pixel shove is worth
+			// MORE seconds. The reward therefore scales with how much reading and
+			// typing the player actually did.
+			const sameShove = fresh().completeWord(3, 0, false, 66).bankedSec
+			const sameShoveLong = fresh().completeWord(
+				12,
+				0,
+				false,
+				66,
+			).bankedSec
+			expect(sameShoveLong).toBeGreaterThan(sameShove)
+
+			// With a realistic per-word shove, longer words bank meaningfully more
+			// time. Short words bank very little by construction, which is honest:
+			// there are only three keystrokes to spend.
+			const realisticShort = fresh().completeWord(
+				3,
+				0,
+				false,
+				3 * TUNING.knockbackPx,
+			).bankedSec
+			const realisticLong = fresh().completeWord(
+				12,
+				0,
+				false,
+				12 * TUNING.knockbackPx,
+			).bankedSec
+			expect(realisticLong).toBeGreaterThan(realisticShort)
+			expect(realisticLong).toBeGreaterThan(0.15)
+		})
+
+		it('reports a negligible shove as not banked', () => {
+			expect(fresh().completeWord(6, 0, false, 0).banked).toBe(false)
+			expect(fresh().completeWord(6, 0, false, 300).banked).toBe(true)
+		})
+
+		/**
+		 * Regression guard for the reason the mechanic was reworked. The old
+		 * model granted a small amount per key and bled a large amount per
+		 * second, which put the break-even typing rate above what most players
+		 * sustain — the shove decayed faster than it was built.
+		 *
+		 * The invariant now is structural: there is no decay term in the tuning
+		 * table at all, so every correct key banks its full value regardless of
+		 * how slowly the player types.
+		 */
+		it('banks the full grant per key, with no decay to outrun', () => {
+			const tuning = TUNING as unknown as Record<string, unknown>
+			expect(tuning.knockbackDecayPerSec).toBeUndefined()
+			expect(TUNING.knockbackPx).toBeGreaterThan(0)
+		})
+
+		it('turns a full word of typing into a meaningful time bank', () => {
+			for (const id of Object.keys(DIFFICULTIES) as DifficultyId[]) {
+				for (const len of [4, 6, 8, 11]) {
+					const banked = len * TUNING.knockbackPx
+					const speed = speedForBudget(
+						budgetMsFor(len, 1, DIFFICULTIES[id]),
+					)
+					// A player who types every letter cleanly gets at least a
+					// fifth of a second of travel bought back, and it grows with
+					// word length.
+					expect(banked / speed).toBeGreaterThan(0.15)
+				}
+			}
+		})
+
+		it('rewards reading and typing, not elapsed time', () => {
+			// The shove is a function of keystrokes, not of how long the player
+			// took, so a long word banks more travel than a short one regardless
+			// of pacing. Pacing is expressed by the near-miss bonus instead.
+			const secsFor = (len: number) => {
+				const travel = len * TUNING.knockbackPx
+				const budget = budgetMsFor(len, 1, DIFFICULTIES.medium)
+				const speed = TUNING.travelDistance / (budget / 1000)
+				return travel / speed
+			}
+			expect(secsFor(10)).toBeGreaterThan(secsFor(3))
+		})
+
+		it('keeps the shove from ever stalling the monster', () => {
+			// Travel always accumulates, so even a fully banked shove leaves the
+			// monster guaranteed to arrive.
+			expect(TUNING.maxKnockbackPx).toBeLessThan(TUNING.travelDistance)
+		})
 	})
 
 	it('derives a speed that spends exactly the budget', () => {

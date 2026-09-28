@@ -2,7 +2,9 @@ import {
 	TUNING,
 	budgetMsFor,
 	levelForWords,
+	retryBudgetFactor,
 	speedForBudget,
+	timeBankMultiplier,
 	type DifficultyProfile,
 } from './tuning'
 
@@ -26,6 +28,16 @@ export class RunState {
 	lives: number
 	wordsCompleted = 0
 	level = 1
+	/**
+	 * How many times the monster has reached the player on the current word.
+	 *
+	 * Reset on every completed word, and it is what makes a retry cost a tighter
+	 * clock rather than a brand-new word. See `retryBudgetFactor`.
+	 */
+	retreats = 0
+
+	/** Player-selected monster-speed assist, as a fraction of the fair speed. */
+	readonly assistLevel: number
 
 	/** Rolling window of keystrokes, used for live WPM/accuracy. */
 	private samples: TypingSample[] = []
@@ -44,10 +56,20 @@ export class RunState {
 	constructor(
 		public readonly difficulty: DifficultyProfile,
 		startMs: number,
+		/**
+		 * Monster-speed assist as a fraction of the fair budget, 0.1 - 1.
+		 *
+		 * This is a player setting rather than a difficulty property: it is an
+		 * accessibility knob that applies on top of whatever mode is selected.
+		 * Clamped in the constructor so a corrupt save cannot produce a speed
+		 * the fairness model never accounted for.
+		 */
+		assistLevel = 1,
 	) {
 		this.lives = difficulty.lives
 		this.runStartMs = startMs
 		this.lastKnownMs = startMs
+		this.assistLevel = Math.min(1, Math.max(0.1, assistLevel))
 	}
 
 	/**
@@ -131,41 +153,89 @@ export class RunState {
 		}
 	}
 
-	/** How long the player has to type `word`, in ms. */
+	/**
+	 * How long the player has to type `word`, in ms.
+	 *
+	 * This is the *fair* budget, before the accessibility assist and before any
+	 * mid-word hits. Kept separate from `speedFor` so the fairness tests can
+	 * reason about the unassisted contract while the scene gets the real number.
+	 */
 	budgetFor(word: string): number {
 		return budgetMsFor(word.length, this.level, this.difficulty)
 	}
 
-	/** Monster speed in px/sec for a given word. */
+	/**
+	 * The budget actually in play: the fair one, shortened by every hit already
+	 * taken on this word.
+	 */
+	liveBudgetMsFor(word: string): number {
+		return Math.max(
+			TUNING.minBudgetMs,
+			this.budgetFor(word) * retryBudgetFactor(this.retreats),
+		)
+	}
+
+	/**
+	 * Monster speed in px/sec for a given word.
+	 *
+	 * `assistLevel` scales the *speed*, not the budget, so a player who needs
+	 * more time gets a slower monster rather than a mislabelled timer. Clamped
+	 * to (0, 1] because a value above 1 would demand a speed the fairness model
+	 * has not accounted for.
+	 */
 	speedFor(word: string): number {
-		return speedForBudget(this.budgetFor(word))
+		return speedForBudget(this.liveBudgetMsFor(word)) * this.assistLevel
+	}
+
+	/** Record a mid-word hit so the retry is tighter than the first attempt. */
+	registerRetreat(): void {
+		this.retreats++
 	}
 
 	/**
 	 * Resolve one completed word.
 	 *
-	 * @param wordLength  length of the finished word
-	 * @param mistakes    wrong keystrokes on that word
-	 * @param nearMiss    true if the kill landed in the last sliver of travel
+	 * @param wordLength    length of the finished word
+	 * @param mistakes      wrong keystrokes on that word
+	 * @param nearMiss      true if the kill landed in the last sliver of travel
+	 * @param bankedShovePx knockback still on the monster at the moment of the
+	 *                       kill; converted to score via `timeBankMultiplier`
+	 *                       so that holding the monster off actually pays
 	 */
 	completeWord(
 		wordLength: number,
 		mistakes: number,
 		nearMiss: boolean,
-	): { earned: number; levelledUp: boolean; perfect: boolean } {
+		bankedShovePx = 0,
+	): {
+		earned: number
+		levelledUp: boolean
+		perfect: boolean
+		bankedSec: number
+		banked: boolean
+	} {
 		const perfect = mistakes === 0
 		const comboTier = Math.floor(this.combo / 10)
 		const comboMultiplier = 1 + comboTier * TUNING.comboTierBonus
 
+		// Convert the shove to seconds using the speed this word actually ran at,
+		// so the reward means the same thing regardless of difficulty or length.
+		const speed = Math.max(1, this.speedFor('x'.repeat(wordLength)))
+		const bankedSec = bankedShovePx / speed
+		const bankMultiplier = timeBankMultiplier(bankedShovePx, speed)
+
 		let earned = TUNING.scorePerChar * wordLength * comboMultiplier
 		if (perfect) earned *= TUNING.perfectBonus
 		if (nearMiss) earned *= TUNING.nearMissBonus
+		earned *= bankMultiplier
 		earned = Math.floor(earned)
 
 		this.score += earned
 		this.combo++
 		this.maxCombo = Math.max(this.maxCombo, this.combo)
 		this.wordsCompleted++
+		// A new word starts with a full clock.
+		this.retreats = 0
 
 		const prevLevel = this.level
 		this.level = levelForWords(this.wordsCompleted)
@@ -174,6 +244,8 @@ export class RunState {
 			earned,
 			levelledUp: this.level > prevLevel,
 			perfect,
+			bankedSec,
+			banked: bankedSec > 0.15,
 		}
 	}
 

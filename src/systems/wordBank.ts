@@ -56,13 +56,14 @@ export class WordBank {
 	pickFromTier(
 		tierIndex: number,
 		reject?: (word: string) => boolean,
+		rng: () => number = Math.random,
 	): string {
 		for (let i = tierIndex; i >= 0; i--) {
 			const pool = this.pools[i]
 			if (!pool || pool.length === 0) continue
 			const ok = reject ? pool.filter((w) => !reject(w)) : pool
 			if (ok.length === 0) continue
-			return ok[Math.floor(Math.random() * ok.length)]
+			return ok[Math.floor(rng() * ok.length)]
 		}
 		return 'YAKITSU'
 	}

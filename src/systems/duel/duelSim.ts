@@ -18,6 +18,8 @@ export interface AttackSpec {
 	interrupts: boolean
 	/** Cannot be interrupted; the only answer is a parry. */
 	armored?: boolean
+	/** Parrying it staggers the attacker and pays meter. Default true. */
+	rewardsParry?: boolean
 	hitstunMs: number
 	meterCost?: number
 	/** Finished without a mistake. Scales damage. */
@@ -31,6 +33,7 @@ interface PendingAttack extends AttackSpec {
 
 export interface FighterState {
 	hp: number
+	maxHp: number
 	meter: number
 	roundsWon: number
 	pending: PendingAttack | null
@@ -38,6 +41,11 @@ export interface FighterState {
 	staggerUntil: number
 	/** Just got hit: cannot start an attack. */
 	hitstunUntil: number
+	/** Consecutive hits taken, each within `chainWindowMs` of the last. */
+	chain: number
+	lastHitAt: number
+	/** Last time this fighter started an attack, for the passivity rule. */
+	lastAttackAt: number
 }
 
 export type DuelPhase = 'waiting' | 'fight' | 'roundOver' | 'matchOver'
@@ -53,7 +61,16 @@ export type DuelEvent =
 			counter: boolean
 			perfect: boolean
 	  }
-	| { t: 'parried'; defender: Side; move: string; perfect: boolean }
+	| {
+			t: 'parried'
+			defender: Side
+			move: string
+			perfect: boolean
+			/** False for a plain deflect: no stagger, no meter. */
+			rewarded: boolean
+			/** HP the defender lost anyway, from being passive. */
+			chip: number
+	  }
 	| { t: 'interrupted'; side: Side; move: string }
 	| { t: 'mistake'; side: Side }
 	| {
@@ -64,22 +81,40 @@ export type DuelEvent =
 	  }
 	| { t: 'matchOver'; winner: Side }
 
-function freshFighter(roundsWon = 0): FighterState {
+function freshFighter(maxHp: number, roundsWon = 0): FighterState {
 	return {
-		hp: DUEL.maxHp,
+		hp: maxHp,
+		maxHp,
 		meter: 0,
 		roundsWon,
 		pending: null,
 		staggerUntil: 0,
 		hitstunUntil: 0,
+		chain: 0,
+		lastHitAt: -Infinity,
+		lastAttackAt: 0,
 	}
 }
 
+export interface DuelOptions {
+	/**
+	 * Per-side health. Online both sides get the default; the ladder raises
+	 * the goblin's so a round lasts the same time at every level's target
+	 * speed, instead of a fast typist deleting it before its attacks matter.
+	 */
+	maxHp?: Partial<Record<Side, number>>
+}
+
 export class DuelSim {
-	readonly fighters: Record<Side, FighterState> = {
-		p1: freshFighter(),
-		p2: freshFighter(),
+	readonly fighters: Record<Side, FighterState>
+
+	constructor(options: DuelOptions = {}) {
+		this.fighters = {
+			p1: freshFighter(options.maxHp?.p1 ?? DUEL.maxHp),
+			p2: freshFighter(options.maxHp?.p2 ?? DUEL.maxHp),
+		}
 	}
+
 	phase: DuelPhase = 'waiting'
 	round = 0
 	private roundEndsAt = 0
@@ -94,8 +129,9 @@ export class DuelSim {
 		for (const side of ['p1', 'p2'] as const) {
 			const prev = this.fighters[side]
 			this.fighters[side] = {
-				...freshFighter(prev.roundsWon),
+				...freshFighter(prev.maxHp, prev.roundsWon),
 				meter: prev.meter,
+				lastAttackAt: now,
 			}
 		}
 		this.roundEndsAt = now + DUEL.roundTimeMs
@@ -123,6 +159,20 @@ export class DuelSim {
 		return now < this.fighters[side].staggerUntil
 	}
 
+	/**
+	 * A fighter who has not thrown anything for `passiveMs`.
+	 *
+	 * Closes the turtle: land one jab for the lead, then parry until the clock
+	 * runs out. A passive fighter's parries only deflect, pay nothing, and
+	 * leak chip damage, so running down the clock costs you the lead.
+	 */
+	isPassive(side: Side, now: number): boolean {
+		return (
+			this.phase === 'fight' &&
+			now - this.fighters[side].lastAttackAt > DUEL.passiveMs
+		)
+	}
+
 	/** Returns false when the attack is not allowed right now. */
 	attack(side: Side, spec: AttackSpec, now: number): boolean {
 		this.advance(now)
@@ -131,6 +181,7 @@ export class DuelSim {
 		const cost = spec.meterCost ?? 0
 		if (f.meter < cost) return false
 		f.meter -= cost
+		f.lastAttackAt = now
 		f.pending = {
 			...spec,
 			startedAt: now,
@@ -160,17 +211,29 @@ export class DuelSim {
 		if (!incoming) return false
 
 		attacker.pending = null
-		attacker.staggerUntil = now + DUEL.parryStaggerMs
-		this.gainMeter(
-			side,
-			DUEL.meterOnParry + (perfect ? DUEL.meterOnPerfect : 0),
-		)
+		const passive = this.isPassive(side, now)
+		const rewarded = incoming.rewardsParry !== false && !passive
+		if (rewarded) {
+			attacker.staggerUntil = now + DUEL.parryStaggerMs
+			this.gainMeter(
+				side,
+				DUEL.meterOnParry + (perfect ? DUEL.meterOnPerfect : 0),
+			)
+		}
+		const chip = passive
+			? Math.max(1, Math.round(incoming.damage * DUEL.passiveChip))
+			: 0
+		const defender = this.fighters[side]
+		defender.hp = Math.max(0, defender.hp - chip)
 		this.emit({
 			t: 'parried',
 			defender: side,
 			move: incoming.move,
 			perfect,
+			rewarded,
+			chip,
 		})
+		if (defender.hp <= 0) this.endRound(other(side), 'ko')
 		return true
 	}
 
@@ -231,9 +294,20 @@ export class DuelSim {
 		damage = Math.round(damage)
 
 		defender.hp = Math.max(0, defender.hp - damage)
+		// Each hit that follows quickly on the last stuns for less, so no
+		// rhythm of attacks can keep a fighter locked down indefinitely.
+		defender.chain =
+			hit.landsAt - defender.lastHitAt <= DUEL.chainWindowMs
+				? defender.chain + 1
+				: 0
+		defender.lastHitAt = hit.landsAt
+		const stunScale = Math.max(
+			0,
+			1 - defender.chain * DUEL.hitstunDecayPerHit,
+		)
 		defender.hitstunUntil = Math.max(
 			defender.hitstunUntil,
-			hit.landsAt + hit.hitstunMs,
+			hit.landsAt + hit.hitstunMs * stunScale,
 		)
 		this.gainMeter(
 			attacker,
@@ -265,7 +339,10 @@ export class DuelSim {
 
 	private endRoundOnTime(): void {
 		const { p1, p2 } = this.fighters
-		const winner = p1.hp === p2.hp ? null : p1.hp > p2.hp ? 'p1' : 'p2'
+		// Compare fractions: the goblin can have more raw HP than the player.
+		const a = p1.hp / p1.maxHp
+		const b = p2.hp / p2.maxHp
+		const winner = a === b ? null : a > b ? 'p1' : 'p2'
 		this.endRound(winner, 'time')
 	}
 

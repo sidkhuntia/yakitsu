@@ -11,6 +11,7 @@ interface BarSet {
 	back: Phaser.GameObjects.Rectangle
 	/** Trails behind the real HP so a chunk of damage reads as a chunk. */
 	ghost: Phaser.GameObjects.Rectangle
+	/** Ghost level as a 0..1 fraction of max HP. */
 	fill: Phaser.GameObjects.Rectangle
 	meter: Phaser.GameObjects.Rectangle
 	meterBack: Phaser.GameObjects.Rectangle
@@ -130,7 +131,7 @@ export class DuelHud {
 			meterBack,
 			name: label,
 			pips,
-			ghostHp: DUEL.maxHp,
+			ghostHp: 1,
 		}
 	}
 
@@ -142,13 +143,13 @@ export class DuelHud {
 		for (const side of ['p1', 'p2'] as const) {
 			const f = fighters[side]
 			const b = this.bars[side]
-			const hpW = (f.hp / DUEL.maxHp) * BAR_W
-			b.fill.setSize(hpW, BAR_H)
+			const frac = f.hp / f.maxHp
+			b.fill.setSize(frac * BAR_W, BAR_H)
 			// The ghost drains only after a short beat, like every fighter.
-			b.ghostHp = Math.max(f.hp, b.ghostHp - (deltaMs / 1000) * 40)
-			b.ghost.setSize((b.ghostHp / DUEL.maxHp) * BAR_W, BAR_H)
+			b.ghostHp = Math.max(frac, b.ghostHp - (deltaMs / 1000) * 0.4)
+			b.ghost.setSize(b.ghostHp * BAR_W, BAR_H)
 			b.fill.setFillStyle(
-				f.hp < 30 ? 0xff1744 : side === 'p1' ? 0x00e676 : 0xff5252,
+				frac < 0.3 ? 0xff1744 : side === 'p1' ? 0x00e676 : 0xff5252,
 			)
 			const full = f.meter >= DUEL.maxMeter
 			b.meter.setSize((f.meter / DUEL.maxMeter) * BAR_W * 0.6, 10)

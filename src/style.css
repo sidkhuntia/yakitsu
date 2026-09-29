@@ -206,6 +206,55 @@ kbd {
 	background: #6a1b9a;
 }
 
+/* --- duel ladder -------------------------------------------------------- */
+
+.level-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+	gap: 10px;
+}
+
+.level-btn {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 2px;
+	padding: 10px 12px;
+	background: #13213a;
+	color: var(--ink);
+	border: 1px solid #2c3e50;
+	border-radius: 5px;
+	font-family: inherit;
+	text-align: left;
+	cursor: pointer;
+	transition:
+		background 0.15s ease,
+		transform 0.15s ease;
+}
+.level-btn:hover:not(:disabled),
+.level-btn:focus-visible {
+	background: #1a3052;
+	transform: translateY(-2px);
+	outline: 2px solid #ffd600;
+	outline-offset: 1px;
+}
+.level-btn:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+.level-num {
+	font-size: 1.4rem;
+	font-weight: bold;
+	color: #ffd600;
+}
+.level-title {
+	font-size: 0.9rem;
+}
+.level-meta {
+	font-size: 0.75rem;
+	color: var(--muted);
+}
+
 /* --- records table ------------------------------------------------------ */
 
 .records-table {

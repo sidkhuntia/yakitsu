@@ -8,19 +8,8 @@
 
 import type { DuelSim } from './duelSim'
 import { ENEMY_ATTACKS, type EnemyAttackDef, type Side } from './duelTuning'
-import type { DifficultyId } from '../tuning'
 
-/** Small seeded PRNG (mulberry32), so a match can be replayed exactly. */
-export function seededRng(seed: number): () => number {
-	let a = seed >>> 0
-	return () => {
-		a = (a + 0x6d2b79f5) >>> 0
-		let t = a
-		t = Math.imul(t ^ (t >>> 15), t | 1)
-		t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
-		return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-	}
-}
+export { seededRng } from './rng'
 
 export interface BrainProfile {
 	/** Pause between attacks, randomised inside this range. */
@@ -34,6 +23,18 @@ export interface BrainProfile {
 	punishDelayMs: number
 	/** Beat before swinging back after being hit (not after its own attack). */
 	recoverMs: number
+	/** Chance an attack that was not parried is followed straight up. */
+	chainChance: number
+	/** Gap before a chained follow-up. */
+	chainGapMs: number
+	/**
+	 * Chance that, seeing the opponent holding a heavy one key from done, it
+	 * answers with the armored lunge. This is what makes pre-loading an
+	 * interrupt a risk rather than a free win against every slash.
+	 */
+	readChance: number
+	/** Minimum time between two punishes, so mistakes cannot steer it. */
+	punishCooldownMs: number
 }
 
 export const GOBLIN: BrainProfile = {
@@ -42,24 +43,11 @@ export const GOBLIN: BrainProfile = {
 	lungeChance: 0.35,
 	punishChance: 0.55,
 	punishDelayMs: 220,
-	recoverMs: 300,
-}
-
-/**
- * Difficulty changes how often the goblin swings, not just how fast its block
- * words must be typed. Without this, anyone who could type the block words at
- * all won every match, whatever the setting.
- */
-const IDLE_BY_DIFFICULTY: Record<DifficultyId, [number, number]> = {
-	easy: [1700, 3000],
-	medium: [1100, 2200],
-	hard: [700, 1500],
-	'i-am-god': [400, 1000],
-}
-
-export function goblinFor(difficulty: DifficultyId): BrainProfile {
-	const [idleMinMs, idleMaxMs] = IDLE_BY_DIFFICULTY[difficulty]
-	return { ...GOBLIN, idleMinMs, idleMaxMs }
+	recoverMs: 250,
+	chainChance: 0.45,
+	chainGapMs: 180,
+	readChance: 0.5,
+	punishCooldownMs: 2500,
 }
 
 export class GoblinBrain {
@@ -69,6 +57,9 @@ export class GoblinBrain {
 	private busy = false
 	/** Whether that busy stretch included one of its own attacks. */
 	private attackedWhileBusy = false
+	/** ...and whether that attack got parried, which rules out a chain. */
+	private parriedWhileBusy = false
+	private lastPunishAt = -Infinity
 
 	constructor(
 		private readonly side: Side,
@@ -84,17 +75,20 @@ export class GoblinBrain {
 		this.queued = null
 		this.busy = false
 		this.attackedWhileBusy = false
+		this.parriedWhileBusy = false
 		this.nextActionAt = now + this.idleGap()
 	}
 
 	/** The opponent fumbled. Maybe jump on it. */
 	onOpponentMistake(now: number): void {
 		if (this.busy || this.queued?.id === 'punish') return
+		if (now - this.lastPunishAt < this.profile.punishCooldownMs) return
 		if (this.rng() >= this.profile.punishChance) return
 		const at = now + this.profile.punishDelayMs
 		if (at < this.nextActionAt) {
 			this.nextActionAt = at
 			this.queued = ENEMY_ATTACKS.punish
+			this.lastPunishAt = now
 		}
 	}
 
@@ -102,10 +96,20 @@ export class GoblinBrain {
 	 * Returns the attack to start now, or null. The caller starts it on the
 	 * sim; the brain waits for it to resolve before scheduling the next one.
 	 */
-	think(now: number, sim: DuelSim): EnemyAttackDef | null {
+	think(
+		now: number,
+		sim: DuelSim,
+		opponentLoaded = false,
+	): EnemyAttackDef | null {
 		if (!sim.canAct(this.side, now)) {
 			this.busy = true
 			if (sim.fighters[this.side].pending) this.attackedWhileBusy = true
+			// A stagger only ever comes from a parried attack, even if the
+			// parry landed before we got to see the attack in flight.
+			if (sim.isStaggered(this.side, now)) {
+				this.attackedWhileBusy = true
+				this.parriedWhileBusy = true
+			}
 			return null
 		}
 		if (this.busy) {
@@ -113,21 +117,35 @@ export class GoblinBrain {
 			// After merely being hit it only takes a short beat: resetting the
 			// full gap on every hit let a steady stream of heavies stunlock it
 			// so it never swung at all.
-			const gap = this.attackedWhileBusy
+			// An attack that went unanswered may roll straight into a second
+			// one, so the player cannot relax the moment a hit resolves.
+			let gap = this.attackedWhileBusy
 				? this.idleGap()
 				: this.profile.recoverMs
+			this.queued = null
+			if (
+				this.attackedWhileBusy &&
+				!this.parriedWhileBusy &&
+				this.rng() < this.profile.chainChance
+			) {
+				gap = this.profile.chainGapMs
+				this.queued = ENEMY_ATTACKS.slash
+			}
 			this.busy = false
 			this.attackedWhileBusy = false
-			this.queued = null
-			this.nextActionAt = Math.max(this.nextActionAt, now + gap)
+			this.parriedWhileBusy = false
+			this.nextActionAt = now + gap
 		}
 		if (now < this.nextActionAt) return null
 
-		const choice =
-			this.queued ??
-			(this.rng() < this.profile.lungeChance
+		let choice = this.queued
+		if (!choice && opponentLoaded && this.rng() < this.profile.readChance) {
+			choice = ENEMY_ATTACKS.lunge
+		}
+		choice ??=
+			this.rng() < this.profile.lungeChance
 				? ENEMY_ATTACKS.lunge
-				: ENEMY_ATTACKS.slash)
+				: ENEMY_ATTACKS.slash
 		this.queued = null
 		return choice
 	}

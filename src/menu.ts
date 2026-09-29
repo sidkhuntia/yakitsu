@@ -5,6 +5,7 @@ import {
 	type Settings,
 } from './systems/persistence'
 import { DIFFICULTIES, type DifficultyId } from './systems/tuning'
+import { MAX_LEVEL, duelLevel } from './systems/duel/duelLevels'
 
 /**
  * HTML shell controller: the landing menu, the modals, and the bridge events
@@ -45,9 +46,13 @@ export function initMenu(): void {
 	const difficultyModal = el('difficulty-modal')
 	const howToModal = el('how-to-play-modal')
 	const settingsModal = el('settings-modal')
-	const allModals = [difficultyModal, howToModal, settingsModal].filter(
-		(m): m is HTMLElement => m !== null,
-	)
+	const duelModal = el('duel-level-modal')
+	const allModals = [
+		difficultyModal,
+		howToModal,
+		settingsModal,
+		duelModal,
+	].filter((m): m is HTMLElement => m !== null)
 
 	// --- modal plumbing ----------------------------------------------------
 	let openModal: HTMLElement | null = null
@@ -171,16 +176,53 @@ export function initMenu(): void {
 	})
 
 	// --- flow --------------------------------------------------------------
-	// Both entry points share the difficulty modal; this records which mode
-	// the chosen difficulty is for.
-	let mode: 'runner' | 'duel' = 'runner'
-	el('start-game-btn')?.addEventListener('click', () => {
-		mode = 'runner'
-		showModal(difficultyModal)
-	})
+	el('start-game-btn')?.addEventListener('click', () =>
+		showModal(difficultyModal),
+	)
+
+	// Duel has a level ladder instead of difficulties, and no lives: each
+	// level is a harder goblin, unlocked by beating the one before it.
+	function renderDuelLevels(): void {
+		const grid = el('duel-levels')
+		if (!grid) return
+		const progress = readSave().duel
+		grid.innerHTML = ''
+		for (let n = 1; n <= MAX_LEVEL; n++) {
+			const lv = duelLevel(n)
+			const locked = n > progress.unlockedLevel
+			const best = progress.bestMs[String(n)]
+			const btn = document.createElement('button')
+			btn.className = 'level-btn'
+			btn.disabled = locked
+			btn.dataset.level = String(n)
+			btn.innerHTML = `
+				<span class="level-num">${locked ? '🔒' : n}</span>
+				<span class="level-title">${lv.title}</span>
+				<span class="level-meta">~${lv.targetWpm} WPM${best ? ` · ${(best / 1000).toFixed(1)}s` : ''}</span>`
+			btn.setAttribute(
+				'aria-label',
+				locked
+					? `Level ${n}, locked`
+					: `Level ${n}, ${lv.title}, about ${lv.targetWpm} words per minute`,
+			)
+			btn.addEventListener('click', () => {
+				closeAllModals()
+				window.dispatchEvent(
+					new CustomEvent('startGame', {
+						detail: { mode: 'duel', level: n },
+					}),
+				)
+			})
+			grid.appendChild(btn)
+		}
+	}
+
 	el('start-duel-btn')?.addEventListener('click', () => {
-		mode = 'duel'
-		showModal(difficultyModal)
+		renderDuelLevels()
+		showModal(duelModal)
+		// Land focus on the newest unlocked level: that is the one to play.
+		const open = readSave().duel.unlockedLevel
+		duelModal?.querySelector<HTMLElement>(`[data-level="${open}"]`)?.focus()
 	})
 
 	document.querySelectorAll<HTMLElement>('.difficulty-btn').forEach((btn) => {
@@ -189,7 +231,9 @@ export function initMenu(): void {
 				(btn.dataset.difficulty as DifficultyId) ?? 'medium'
 			closeAllModals()
 			window.dispatchEvent(
-				new CustomEvent('startGame', { detail: { difficulty, mode } }),
+				new CustomEvent('startGame', {
+					detail: { difficulty, mode: 'runner' },
+				}),
 			)
 		})
 	})

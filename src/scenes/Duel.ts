@@ -3,21 +3,22 @@ import { WordBank } from '../systems/wordBank'
 import { Juice } from '../systems/Juice'
 import { Particles } from '../systems/Hud'
 import { displayFont } from '../systems/font'
-import { loadData, type Settings } from '../systems/persistence'
-import {
-	DIFFICULTIES,
-	type DifficultyId,
-	type DifficultyProfile,
-} from '../systems/tuning'
+import { loadData, recordDuel, type Settings } from '../systems/persistence'
 import { DuelSim, type DuelEvent } from '../systems/duel/duelSim'
-import { GoblinBrain, goblinFor, seededRng } from '../systems/duel/goblinBrain'
+import { GoblinBrain } from '../systems/duel/goblinBrain'
+import { mixSeed, randomSeed, seededRng } from '../systems/duel/rng'
+import {
+	MAX_LEVEL,
+	clampLevel,
+	duelLevel,
+	type DuelLevel,
+} from '../systems/duel/duelLevels'
 import { PlayerDeck, MOVE_SLOTS, type Slot } from '../systems/duel/playerDeck'
 import { CardView } from '../systems/duel/CardView'
 import { DuelHud } from '../systems/duel/DuelHud'
 import {
 	DUEL,
 	ENEMY_ATTACKS,
-	ENEMY_DAMAGE_SCALE,
 	MOVES,
 	enemyWindupMs,
 	type EnemyAttackDef,
@@ -51,14 +52,18 @@ interface Telegraph {
 }
 
 /**
- * Prototype duel: you vs the goblin, best of three.
+ * Prototype duel: you vs the goblin, best of three, on a level ladder.
  *
  * Rules live in `DuelSim`; this scene only feeds it input and draws its
- * events. The sim runs on its own clock (`simNow`) so pause and hitstop are
- * exact, and so the same sim can later be driven by a server.
+ * events. The sim runs on its own clock (`simNow`), which advances in real
+ * time and stops only for pause. Hitstop and slow-mo are purely visual: when
+ * they also slowed the sim, every hit you landed froze the goblin's windup
+ * while your keystrokes kept counting, which was free typing time.
  */
 export default class Duel extends Phaser.Scene {
-	private difficulty!: DifficultyProfile
+	private level!: DuelLevel
+	/** One number both players would share online; it fixes every word. */
+	private seed = 0
 	private settings!: Settings
 	private sim!: DuelSim
 	private brain!: GoblinBrain
@@ -82,6 +87,9 @@ export default class Duel extends Phaser.Scene {
 	private sfx: Record<string, Phaser.Sound.BaseSound> = {}
 	private music?: Phaser.Sound.BaseSound
 	private pauseText!: Phaser.GameObjects.Text
+	private pauseShade!: Phaser.GameObjects.Rectangle
+	private passiveText!: Phaser.GameObjects.Text
+	private won = false
 	private timers: Phaser.Time.TimerEvent[] = []
 
 	constructor() {
@@ -99,23 +107,26 @@ export default class Duel extends Phaser.Scene {
 		this.cards = new Map()
 		this.sfx = {}
 		this.timers = []
+		this.won = false
 	}
 
 	create(): void {
-		const requested =
-			(this.registry.get('difficulty') as DifficultyId) ?? 'medium'
-		this.difficulty = DIFFICULTIES[requested] ?? DIFFICULTIES.medium
+		this.level = duelLevel(
+			clampLevel(Number(this.registry.get('duelLevel') ?? 1)),
+		)
 		this.settings = loadData().settings
 
 		const bank = new WordBank(window.THESAURUS)
-		this.sim = new DuelSim()
+		this.seed = randomSeed()
+		this.sim = new DuelSim({ maxHp: { p2: this.level.goblinHp } })
 		this.brain = new GoblinBrain(
 			'p2',
-			seededRng(Date.now()),
-			goblinFor(this.difficulty.id),
+			seededRng(mixSeed(this.seed, 0xb0b)),
+			this.level.brain,
 		)
-		this.deck = new PlayerDeck((tier, reject) =>
-			bank.pickFromTier(tier, reject),
+		this.deck = new PlayerDeck(
+			(tier, reject, rng) => bank.pickFromTier(tier, reject, rng),
+			this.seed,
 		)
 		this.juice = new Juice(this, this.settings.screenShake)
 		this.particles = new Particles(this)
@@ -123,12 +134,15 @@ export default class Duel extends Phaser.Scene {
 		this.buildWorld()
 		this.buildFighters()
 		this.buildCards()
-		this.hud = new DuelHud(this, { p1: 'YOU', p2: 'GOBLIN' })
+		this.hud = new DuelHud(this, {
+			p1: 'YOU',
+			p2: `LV ${this.level.level} · ${this.level.title.toUpperCase()}`,
+		})
 		this.add
 			.text(
 				this.scale.width / 2,
 				this.scale.height - 28,
-				'Type a card to attack · type the RED word to parry · Backspace to cancel',
+				'Type a card to attack · type the RED word to parry (your word waits) · Backspace to cancel',
 				{
 					fontFamily: displayFont(),
 					fontSize: '16px',
@@ -137,6 +151,29 @@ export default class Duel extends Phaser.Scene {
 			)
 			.setOrigin(0.5)
 			.setDepth(40)
+		this.passiveText = this.add
+			.text(PLAYER_HOME_X, this.groundY() - 250, '', {
+				fontFamily: displayFont(),
+				fontSize: '22px',
+				color: '#ff5252',
+				stroke: '#000000',
+				strokeThickness: 5,
+			})
+			.setOrigin(0.5)
+			.setDepth(45)
+		// Opaque enough that a paused telegraph cannot be read at leisure.
+		this.pauseShade = this.add
+			.rectangle(
+				0,
+				0,
+				this.scale.width,
+				this.scale.height,
+				0x05080d,
+				0.92,
+			)
+			.setOrigin(0)
+			.setDepth(79)
+			.setVisible(false)
 		this.pauseText = this.add
 			.text(
 				this.scale.width / 2,
@@ -222,7 +259,7 @@ export default class Duel extends Phaser.Scene {
 		anim('hero-dash', 'avatar_run', 7, 24, -1)
 		anim('hero-hit', 'avatar_hit', 3, 12)
 		anim('hero-death', 'avatar_death', 10, 10)
-		anim('gob-idle', 'monster_Goblin_idle', 3, 8, -1)
+		anim('gob-idle', 'monster_Goblin_idle', 3, 11, -1)
 		anim('gob-attack', 'monster_Goblin_attack', 7, GOBLIN_ATTACK_FPS)
 		anim('gob-hit', 'monster_Goblin_hit', 3, 12)
 		anim('gob-death', 'monster_Goblin_death', 3, 8)
@@ -291,7 +328,7 @@ export default class Duel extends Phaser.Scene {
 				view.setVisible(false)
 				continue
 			}
-			view.setVisible(this.phase === 'fight')
+			view.setVisible(this.phase === 'fight' && !this.paused)
 			view.render(
 				card,
 				active === slot,
@@ -320,11 +357,12 @@ export default class Duel extends Phaser.Scene {
 				else this.togglePause()
 				return
 			}
-			if (this.phase === 'over' && e.key === 'Enter') {
-				this.scene.restart()
+			if (this.phase === 'over') {
+				this.onMatchOverKey(e.key)
 				return
 			}
-			if (this.paused || this.phase !== 'fight') return
+			// Auto-repeat from a held key is not typing.
+			if (e.repeat || this.paused || this.phase !== 'fight') return
 
 			if (e.key === 'Backspace') {
 				e.preventDefault()
@@ -367,6 +405,19 @@ export default class Duel extends Phaser.Scene {
 				break
 		}
 		this.renderCards()
+	}
+
+	private onMatchOverKey(key: string): void {
+		const next = this.won && this.level.level < MAX_LEVEL
+		if (key === 'Enter') {
+			this.registry.set(
+				'duelLevel',
+				next ? this.level.level + 1 : this.level.level,
+			)
+			this.scene.restart()
+		} else if (key === 'r' || key === 'R') {
+			this.scene.restart()
+		}
 	}
 
 	private tryParry(perfect: boolean): void {
@@ -417,7 +468,9 @@ export default class Duel extends Phaser.Scene {
 			this.sim.fighters.p2.roundsWon === DUEL.roundsToWin - 1
 		this.hud.announce(
 			final ? 'FINAL ROUND' : `ROUND ${round}`,
-			'',
+			round === 1
+				? `LEVEL ${this.level.level} · ${this.level.title.toUpperCase()}`
+				: '',
 			DUEL.introMs - 700,
 		)
 		this.later(DUEL.introMs - 400, () => {
@@ -450,10 +503,14 @@ export default class Duel extends Phaser.Scene {
 	update(_time: number, delta: number): void {
 		this.juice.update(delta)
 		if (this.paused) return
-		this.simNow += delta * this.juice.scale
+		this.simNow += delta
 
 		if (this.phase === 'fight') {
-			const choice = this.brain.think(this.simNow, this.sim)
+			const choice = this.brain.think(
+				this.simNow,
+				this.sim,
+				this.deck.isLoaded(),
+			)
 			if (choice) this.startEnemyAttack(choice)
 			this.flushBuffered()
 			this.driveGoblinStrike()
@@ -467,26 +524,55 @@ export default class Duel extends Phaser.Scene {
 			this.clockMs = this.sim.timeLeftMs(this.simNow)
 		this.hud.update(this.sim.fighters, this.clockMs, delta)
 		if (this.telegraph) this.renderCards()
+		this.updatePassiveWarning()
 		this.dizzy?.setPosition(this.goblin.x, this.goblin.y - 150)
+	}
+
+	/** Warn before the passivity rule kicks in, then while it applies. */
+	private updatePassiveWarning(): void {
+		if (this.phase !== 'fight') {
+			this.passiveText.setText('')
+			return
+		}
+		const idle = this.simNow - this.sim.fighters.p1.lastAttackAt
+		const left = DUEL.passiveMs - idle
+		if (left > 3000) this.passiveText.setText('')
+		else if (left > 0)
+			this.passiveText.setText(
+				`ATTACK! PASSIVE IN ${Math.ceil(left / 1000)}`,
+			)
+		else this.passiveText.setText('PASSIVE: PARRIES LEAK DAMAGE')
 	}
 
 	private startEnemyAttack(def: EnemyAttackDef): void {
 		const word = this.deck.offerBlock(def.blockTier)
 		const windup =
-			enemyWindupMs(word.length, def, this.difficulty, this.sim.round) /
-			Math.max(0.5, this.settings.assistLevel)
-		this.sim.attack(
+			enemyWindupMs(
+				word.length,
+				def,
+				this.level.msPerChar,
+				this.sim.round,
+				this.level.reactionMs,
+			) / Math.max(0.5, this.settings.assistLevel)
+		const ok = this.sim.attack(
 			'p2',
 			{
 				move: def.id,
-				damage: def.damage * ENEMY_DAMAGE_SCALE[this.difficulty.id],
+				damage: this.enemyDamage(def),
 				startupMs: windup,
 				interrupts: def.interrupts,
 				armored: def.armored,
+				rewardsParry: def.rewardsParry,
 				hitstunMs: def.hitstunMs,
 			},
 			this.simNow,
 		)
+		// Never leave a block card up for an attack that is not coming.
+		if (!ok) this.deck.clearBlock()
+	}
+
+	private enemyDamage(def: EnemyAttackDef): number {
+		return Math.round(def.damage * this.level.damageScale)
 	}
 
 	/** Start the swing so the spear connects exactly when the sim lands it. */
@@ -536,7 +622,8 @@ export default class Duel extends Phaser.Scene {
 				else this.onGoblinHit(e.damage)
 				break
 			case 'parried':
-				this.onParry(e.perfect)
+				if (e.rewarded) this.onParry(e.perfect)
+				else this.onDeflect(e.chip)
 				break
 			case 'interrupted':
 				if (e.side === 'p2') {
@@ -571,7 +658,7 @@ export default class Duel extends Phaser.Scene {
 		this.cards
 			.get('block')
 			?.setCaption(
-				`PARRY ${def.label} · ${def.damage}${def.armored ? ' · ARMORED' : ''}`,
+				`PARRY ${def.label} · ${this.enemyDamage(def)}${def.armored ? ' · ARMORED' : def.rewardsParry ? '' : ' · DEFLECT ONLY'}`,
 			)
 		this.goblin.setTint(0xff8080)
 		// Anticipation: a small step back before the lunge.
@@ -680,6 +767,24 @@ export default class Duel extends Phaser.Scene {
 		)
 	}
 
+	/**
+	 * A parry that pays nothing: the attack was a punish, or you have been
+	 * passive and leak chip damage through your guard.
+	 */
+	private onDeflect(chip: number): void {
+		this.endTelegraph()
+		this.goblinRetreat()
+		this.juice.shake(3, 120)
+		this.play('parry', 1.3)
+		this.floatText(
+			(this.player.x + this.goblin.x) / 2,
+			this.groundY() - 320,
+			chip > 0 ? `PASSIVE -${chip}` : 'DEFLECT',
+			chip > 0 ? '#ff5252' : '#8fa3bd',
+			32,
+		)
+	}
+
 	private onParry(perfect: boolean): void {
 		this.endTelegraph()
 		this.goblin.play('gob-hit')
@@ -754,12 +859,30 @@ export default class Duel extends Phaser.Scene {
 	}
 
 	private onMatchOver(won: boolean): void {
+		this.won = won
+		const unlocked = recordDuel(
+			this.level.level,
+			won,
+			this.simNow,
+			MAX_LEVEL,
+			this.settings.assistLevel < 1,
+		)
+		const next = won && this.level.level < MAX_LEVEL
+		const prompt = next
+			? 'Enter: next level  ·  R: replay  ·  Esc: menu'
+			: 'Enter: rematch  ·  Esc: menu'
 		this.later(DUEL.roundOverMs, () => {
 			this.phase = 'over'
 			this.renderCards()
 			this.hud.announce(
-				won ? 'VICTORY' : 'DEFEAT',
-				'Enter: rematch  ·  Esc: menu',
+				won
+					? this.level.level === MAX_LEVEL
+						? 'CHAMPION'
+						: 'VICTORY'
+					: 'DEFEAT',
+				unlocked
+					? `LEVEL ${this.level.level + 1} UNLOCKED\n${prompt}`
+					: prompt,
 				0,
 				won ? '#00e676' : '#ff5252',
 			)
@@ -860,6 +983,8 @@ export default class Duel extends Phaser.Scene {
 		if (this.phase === 'over') return
 		this.paused = !this.paused
 		this.pauseText.setVisible(this.paused)
+		this.pauseShade.setVisible(this.paused)
+		this.renderCards()
 		if (this.paused) {
 			this.tweens.pauseAll()
 			this.anims.pauseAll()

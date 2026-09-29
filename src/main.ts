@@ -39,6 +39,7 @@ const game = new Phaser.Game(config)
 let assetsReady = false
 let pendingDifficulty: string | null = null
 let pendingMode: GameMode = 'runner'
+let pendingLevel = 1
 
 /** Which scene a run starts: the original runner, or the duel prototype. */
 type GameMode = 'runner' | 'duel'
@@ -51,7 +52,7 @@ game.events.on('yk-assets-ready', () => {
 	if (pendingDifficulty) {
 		const d = pendingDifficulty
 		pendingDifficulty = null
-		startRun(d, pendingMode)
+		startRun(d, pendingMode, pendingLevel)
 	}
 })
 
@@ -105,8 +106,13 @@ function refreshHighScore(): void {
 }
 
 /** Boot a run at the given difficulty, always from a clean scene. */
-function startRun(difficulty: string, mode: GameMode = 'runner'): void {
+function startRun(
+	difficulty: string,
+	mode: GameMode = 'runner',
+	level = 1,
+): void {
 	game.registry.set('difficulty', difficulty)
+	game.registry.set('duelLevel', level)
 	const key = SCENE_FOR[mode]
 	for (const other of Object.values(SCENE_FOR)) {
 		if (other !== key && game.scene.isActive(other)) game.scene.stop(other)
@@ -240,10 +246,16 @@ window.addEventListener('DOMContentLoaded', () => {
 	// chosen a difficulty.
 	window.addEventListener('startGame', (e) => {
 		const detail = (
-			e as CustomEvent<{ difficulty?: string; mode?: GameMode }>
+			e as CustomEvent<{
+				difficulty?: string
+				mode?: GameMode
+				level?: number
+			}>
 		).detail
 		const difficulty = detail?.difficulty ?? 'medium'
 		const mode: GameMode = detail?.mode === 'duel' ? 'duel' : 'runner'
+		// The scene clamps it; this only guards against a non-number.
+		const level = Number(detail?.level) || 1
 
 		setScreen('landing-screen', false)
 		setScreen('game-screen', true)
@@ -251,9 +263,10 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (!assetsReady) {
 			pendingDifficulty = difficulty
 			pendingMode = mode
+			pendingLevel = level
 			return
 		}
-		startRun(difficulty, mode)
+		startRun(difficulty, mode, level)
 	})
 
 	window.addEventListener('returnToMenu', () => {

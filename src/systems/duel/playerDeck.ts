@@ -8,6 +8,7 @@
 
 import { TypingEngine } from '../typingEngine'
 import { MOVES, type MoveId } from './duelTuning'
+import { mixSeed, seededRng } from './rng'
 
 export type Slot = MoveId | 'block'
 
@@ -31,13 +32,44 @@ export type KeyResult =
 export type WordPicker = (
 	tier: number,
 	reject: (w: string) => boolean,
+	rng: () => number,
 ) => string
+
+/** Stable ids for seeding, so a slot's stream never depends on Map order. */
+const SLOT_STREAM: Record<Slot, number> = {
+	jab: 1,
+	heavy: 2,
+	special: 3,
+	block: 4,
+}
 
 export class PlayerDeck {
 	private readonly cards = new Map<Slot, Card>()
 	private activeSlot: Slot | null = null
+	/**
+	 * The attack card you were on when you switched to the block word. It
+	 * keeps its progress and gets the caret back once the block resolves.
+	 * Resetting it instead made parrying a net loss for slow typists: every
+	 * telegraph wiped a half-typed heavy, so ignoring parries won more.
+	 */
+	private suspendedSlot: Slot | null = null
+	/** How many words each slot has dealt so far. */
+	private readonly dealt: Record<Slot, number> = {
+		jab: 0,
+		heavy: 0,
+		special: 0,
+		block: 0,
+	}
 
-	constructor(private readonly pick: WordPicker) {
+	/**
+	 * @param seed  the match seed. Two decks built with the same seed deal the
+	 *   same n-th word to each slot, which is what makes an online match fair:
+	 *   neither player can be luckier with their words.
+	 */
+	constructor(
+		private readonly pick: WordPicker,
+		readonly seed: number,
+	) {
 		for (const slot of MOVE_SLOTS) this.deal(slot, MOVES[slot].tier)
 	}
 
@@ -68,8 +100,14 @@ export class PlayerDeck {
 			if (!active.engine.hasErrors()) {
 				const target = this.cardStartingWith(c, active.slot)
 				if (target && this.isUnlocked(target.slot, meter)) {
-					active.engine.reset(active.word)
-					active.slipped = false
+					if (target.slot === 'block') {
+						this.suspendedSlot = active.slot
+					} else {
+						// Changing attacks is a commitment: both the card you
+						// leave and anything parked behind the block start over.
+						this.resetCard(active)
+						this.dropSuspended()
+					}
 					this.activeSlot = target.slot
 					return this.advance(target, c)
 				}
@@ -97,6 +135,7 @@ export class PlayerDeck {
 		if (active.engine.getCaret() === 0) {
 			active.slipped = false
 			this.activeSlot = null
+			if (active.slot === 'block') this.resumeSuspended()
 		}
 		return true
 	}
@@ -112,14 +151,29 @@ export class PlayerDeck {
 		if (!this.cards.has('block')) return
 		this.cards.delete('block')
 		if (this.activeSlot === 'block') this.activeSlot = null
+		this.resumeSuspended()
 	}
 
 	/** Fresh words everywhere, e.g. between rounds. */
 	resetAll(): void {
 		this.clearBlock()
 		this.activeSlot = null
+		this.suspendedSlot = null
 		for (const slot of MOVE_SLOTS) this.cards.delete(slot)
 		for (const slot of MOVE_SLOTS) this.deal(slot, MOVES[slot].tier)
+	}
+
+	/**
+	 * A heavy or special one keystroke from done. The goblin reads this, the
+	 * same way a human opponent will read your visible progress online, and
+	 * answers with an attack that cannot be interrupted.
+	 */
+	isLoaded(): boolean {
+		if (this.activeSlot !== 'heavy' && this.activeSlot !== 'special')
+			return false
+		const card = this.cards.get(this.activeSlot)
+		if (!card || card.engine.hasErrors()) return false
+		return card.engine.getCaret() >= card.word.length - 1
 	}
 
 	isUnlocked(slot: Slot, meter: number): boolean {
@@ -127,7 +181,31 @@ export class PlayerDeck {
 		return meter >= MOVES[slot].meterCost
 	}
 
+	/** The attack card parked behind the block word, if any. */
+	get suspended(): Slot | null {
+		return this.suspendedSlot
+	}
+
 	// ----------------------------------------------------------------- internals
+
+	private resumeSuspended(): void {
+		const slot = this.suspendedSlot
+		this.suspendedSlot = null
+		if (!slot || this.activeSlot) return
+		const card = this.cards.get(slot)
+		if (card && card.engine.getCaret() > 0) this.activeSlot = slot
+	}
+
+	private dropSuspended(): void {
+		const card = this.suspendedSlot && this.cards.get(this.suspendedSlot)
+		if (card) this.resetCard(card)
+		this.suspendedSlot = null
+	}
+
+	private resetCard(card: Card): void {
+		card.engine.reset(card.word)
+		card.slipped = false
+	}
 
 	private advance(card: Card, c: string): KeyResult {
 		card.engine.input(c)
@@ -160,9 +238,14 @@ export class PlayerDeck {
 				.filter((card) => card.slot !== slot)
 				.map((card) => card.word[0]),
 		)
+		// Counter-based: the n-th word of a slot comes from its own seed, so it
+		// does not shift when other slots are dealt in a different order.
+		const n = this.dealt[slot]++
+		const rng = seededRng(mixSeed(this.seed, SLOT_STREAM[slot], n))
 		const word = this.pick(
 			tier,
 			(w) => w === previous || taken.has(w[0]),
+			rng,
 		).toUpperCase()
 		const card: Card = {
 			slot,

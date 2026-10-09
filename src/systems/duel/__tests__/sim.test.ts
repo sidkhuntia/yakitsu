@@ -1,0 +1,562 @@
+import { describe, expect, it } from 'vitest'
+import { DuelSim, type DuelEvent, type DuelOptions } from '../duelSim'
+import { FIGHTERS, type FighterDef, type FighterMove } from '../fighters'
+import { DUEL, type MoveId, type Side } from '../duelTuning'
+
+/** A copy of `base` with one move's numbers changed. */
+function variant(
+	base: FighterDef,
+	move: MoveId,
+	patch: Partial<FighterMove>,
+): FighterDef {
+	return {
+		...base,
+		moves: { ...base.moves, [move]: { ...base.moves[move], ...patch } },
+	}
+}
+
+const HERO = FIGHTERS.hero
+
+/** A started round with its opening events already drained. */
+function sim(
+	p1: FighterDef = HERO,
+	p2: FighterDef = HERO,
+	options: Omit<DuelOptions, 'fighters'> = {},
+): DuelSim {
+	const s = new DuelSim({ fighters: { p1, p2 }, ...options })
+	s.startRound(0)
+	s.drain()
+	return s
+}
+
+const hitDamages = (events: DuelEvent[]): number[] =>
+	events.flatMap((e) => (e.t === 'hit' ? [e.damage] : []))
+
+const poisonDamages = (events: DuelEvent[]): number[] =>
+	events.flatMap((e) => (e.t === 'poison' ? [e.damage] : []))
+
+const attacksStarted = (events: DuelEvent[]) =>
+	events.flatMap((e) => (e.t === 'attackStarted' ? [e] : []))
+
+describe('DuelSim: core rules', () => {
+	it('lands an attack after its windup, not before', () => {
+		const s = sim()
+		expect(s.attack('p1', 'jab', false, 0)).toBe(true)
+		s.advance(299)
+		expect(s.fighters.p2.hp).toBe(HERO.maxHp)
+		s.advance(300)
+		expect(s.fighters.p2.hp).toBe(HERO.maxHp - 4)
+	})
+
+	it('refuses a second attack while one is in flight', () => {
+		const s = sim()
+		s.attack('p1', 'jab', false, 0)
+		expect(s.attack('p1', 'jab', false, 50)).toBe(false)
+	})
+
+	it('a parry cancels the attack, staggers the attacker and pays meter', () => {
+		const s = sim()
+		s.attack('p2', 'heavy', false, 0) // windup 1100
+		expect(s.parry('p1', false, 500)).toBe(true)
+		s.advance(2000)
+		expect(s.fighters.p1.hp).toBe(HERO.maxHp)
+		expect(s.isStaggered('p2', 900)).toBe(true)
+		expect(s.canAct('p2', 900)).toBe(false)
+		expect(s.fighters.p1.meter).toBe(DUEL.meterOnParry)
+	})
+
+	it('a perfect parry pays the extra meter', () => {
+		const s = sim()
+		s.attack('p2', 'heavy', false, 0)
+		expect(s.parry('p1', true, 500)).toBe(true)
+		expect(s.fighters.p1.meter).toBe(
+			DUEL.meterOnParry + DUEL.meterOnPerfect,
+		)
+	})
+
+	it('a parry with nothing incoming does nothing', () => {
+		const s = sim()
+		expect(s.parry('p1', true, 100)).toBe(false)
+		expect(s.fighters.p1.meter).toBe(0)
+	})
+
+	it('a jab cannot be parried (blockTier null)', () => {
+		const s = sim()
+		s.attack('p2', 'jab', false, 0)
+		expect(s.parry('p1', false, 100)).toBe(false)
+		s.advance(300)
+		expect(s.fighters.p1.hp).toBe(HERO.maxHp - 4)
+		expect(s.fighters.p1.meter).toBe(DUEL.meterOnTakeHit)
+	})
+
+	it('hits on a staggered fighter are counters (x1.5)', () => {
+		const s = sim()
+		s.attack('p2', 'heavy', false, 0)
+		s.parry('p1', false, 500) // p2 staggered until 1800
+		s.attack('p1', 'jab', false, 600) // lands 900
+		s.advance(900)
+		const hit = s.drain().find((e) => e.t === 'hit')
+		expect(hit).toMatchObject({ counter: true, damage: 6 })
+	})
+
+	it('an interrupting hit cancels a non-armored windup', () => {
+		// A quick heavy (windup 160) so it lands inside p2's 1100ms windup.
+		const quickHeavy = variant(HERO, 'heavy', { windupMs: 160 })
+		const s = sim(quickHeavy, HERO)
+		s.attack('p2', 'heavy', false, 0) // lands 1100
+		s.attack('p1', 'heavy', false, 100) // lands 260, interrupts
+		s.advance(3000)
+		expect(s.fighters.p1.hp).toBe(HERO.maxHp)
+		expect(s.fighters.p2.hp).toBe(HERO.maxHp - 13)
+		const events = s.drain()
+		expect(events).toContainEqual({
+			t: 'interrupted',
+			side: 'p2',
+			move: 'heavy',
+		})
+	})
+
+	it('an armored windup cannot be interrupted', () => {
+		const armoredHero = variant(HERO, 'heavy', { armored: true })
+		const quickHeavy = variant(HERO, 'heavy', { windupMs: 160 })
+		const s = sim(quickHeavy, armoredHero)
+		s.attack('p2', 'heavy', false, 0) // armored, lands 1100
+		s.attack('p1', 'heavy', false, 100) // lands 260, cannot interrupt
+		s.advance(3000)
+		expect(s.fighters.p2.hp).toBe(HERO.maxHp - 13)
+		expect(s.fighters.p1.hp).toBe(HERO.maxHp - 13)
+		expect(s.drain().some((e) => e.t === 'interrupted')).toBe(false)
+	})
+
+	it('a jab does not interrupt', () => {
+		const s = sim()
+		s.attack('p2', 'heavy', false, 0) // lands 1100
+		s.attack('p1', 'jab', false, 100) // lands 400, no interrupt
+		s.advance(3000)
+		expect(s.fighters.p1.hp).toBe(HERO.maxHp - 13)
+		expect(s.drain().some((e) => e.t === 'interrupted')).toBe(false)
+	})
+
+	it('KO ends the round and two rounds end the match', () => {
+		const killer = variant(HERO, 'jab', { damage: 999 })
+		const s = sim(killer, HERO)
+		s.attack('p1', 'jab', false, 0)
+		s.advance(300)
+		expect(s.phase).toBe('roundOver')
+		expect(s.fighters.p1.roundsWon).toBe(1)
+
+		s.startRound(5000)
+		expect(s.fighters.p2.hp).toBe(HERO.maxHp)
+		s.attack('p1', 'jab', false, 5000)
+		s.advance(5300)
+		expect(s.phase).toBe('matchOver')
+		expect(s.drain().pop()).toEqual({ t: 'matchOver', winner: 'p1' })
+	})
+
+	it('time out goes to the higher HP fraction, not the higher HP', () => {
+		// p1: 96/100 = 0.96. p2: 188/200 = 0.94 but more raw HP than p1.
+		const s = sim(HERO, HERO, { maxHp: { p2: 200 } })
+		s.attack('p2', 'jab', false, 0) // lands 300
+		s.attack('p1', 'jab', false, 600)
+		s.attack('p1', 'jab', false, 1200)
+		s.attack('p1', 'jab', false, 1800)
+		s.advance(DUEL.roundTimeMs)
+		expect(s.fighters.p1.hp).toBeLessThan(s.fighters.p2.hp)
+		const over = s.drain().find((e) => e.t === 'roundOver')
+		expect(over).toMatchObject({ winner: 'p1', reason: 'time' })
+	})
+
+	it('meter gates a costly move', () => {
+		const s = sim()
+		expect(s.attack('p1', 'special', false, 0)).toBe(false)
+		s.fighters.p1.meter = 100
+		expect(s.attack('p1', 'special', false, 0)).toBe(true)
+		expect(s.fighters.p1.meter).toBe(0)
+	})
+
+	it('hitstun decays along a chain', () => {
+		const s = sim(variant(HERO, 'jab', { windupMs: 0, hitstunMs: 300 }))
+		const stunAfter = (t: number) => {
+			s.attack('p1', 'jab', false, t)
+			s.advance(t)
+			return s.fighters.p2.hitstunUntil - t
+		}
+		const first = stunAfter(0)
+		const second = stunAfter(400)
+		const third = stunAfter(800)
+		expect(second).toBeLessThan(first)
+		expect(third).toBeLessThan(second)
+	})
+
+	it('no rhythm of jabs can stunlock', () => {
+		// The old exploit: a jab every ~400ms kept the target in hitstun forever.
+		const s = sim(
+			variant(HERO, 'jab', { damage: 0, windupMs: 110, hitstunMs: 220 }),
+		)
+		let freeFrames = 0
+		for (let t = 0; t < 10_000; t += 10) {
+			if (t % 400 === 0) s.attack('p1', 'jab', false, t)
+			s.advance(t)
+			if (s.canAct('p2', t)) freeFrames++
+		}
+		expect(freeFrames).toBeGreaterThan(300)
+	})
+
+	it('a long gap resets the chain', () => {
+		const s = sim(variant(HERO, 'jab', { windupMs: 0, hitstunMs: 300 }))
+		for (const t of [0, 300, 600]) {
+			s.attack('p1', 'jab', false, t)
+			s.advance(t)
+		}
+		s.attack('p1', 'jab', false, 5000)
+		s.advance(5000)
+		expect(s.fighters.p2.hitstunUntil).toBe(5300)
+	})
+
+	it('a passive fighter parry only deflects and leaks chip', () => {
+		const s = sim()
+		// p1 has thrown nothing for over passiveMs, so its parry is passive.
+		s.attack('p2', 'heavy', false, 10_500) // lands 11600
+		expect(s.parry('p1', false, 11_000)).toBe(true)
+		expect(s.isStaggered('p2', 11_100)).toBe(false)
+		expect(s.fighters.p1.meter).toBe(0)
+		expect(s.fighters.p1.hp).toBe(HERO.maxHp - 5) // round(13 * 0.4)
+		expect(s.drain().pop()).toMatchObject({
+			t: 'parried',
+			rewarded: false,
+			chip: 5,
+		})
+	})
+})
+
+describe('DuelSim: windups and timing', () => {
+	it('windupScale lengthens only that side windups', () => {
+		const s = sim(HERO, HERO, { windupScale: { p1: 2 } })
+		s.attack('p1', 'jab', false, 0)
+		s.attack('p2', 'jab', false, 0)
+		const started = attacksStarted(s.drain())
+		expect(started.find((e) => e.side === 'p1')).toMatchObject({
+			landsAt: 600,
+		})
+		expect(started.find((e) => e.side === 'p2')).toMatchObject({
+			landsAt: 300,
+		})
+	})
+
+	it('reports blockTier and armored on attackStarted', () => {
+		const s = sim()
+		s.attack('p1', 'jab', false, 0)
+		s.fighters.p2.meter = 100
+		s.attack('p2', 'special', false, 0)
+		const started = attacksStarted(s.drain())
+		expect(started).toEqual([
+			expect.objectContaining({
+				side: 'p1',
+				move: 'jab',
+				blockTier: null,
+				armored: false,
+			}),
+			expect.objectContaining({
+				side: 'p2',
+				move: 'special',
+				blockTier: 1,
+				armored: true,
+			}),
+		])
+	})
+
+	it('readyAt and nextDueAt follow the pending attack and the round clock', () => {
+		const s = new DuelSim({ fighters: { p1: HERO, p2: HERO } })
+		expect(s.nextDueAt()).toBe(Infinity)
+		expect(s.readyAt('p1')).toBe(Infinity)
+
+		s.startRound(0)
+		expect(s.readyAt('p1')).toBe(0)
+		expect(s.nextDueAt()).toBe(DUEL.roundTimeMs)
+
+		s.attack('p1', 'jab', false, 0) // lands 300
+		expect(s.readyAt('p1')).toBe(Infinity)
+		expect(s.readyAt('p2')).toBe(0)
+		expect(s.nextDueAt()).toBe(300)
+
+		s.advance(300)
+		expect(s.readyAt('p2')).toBe(300 + HERO.moves.jab.hitstunMs)
+		expect(s.nextDueAt()).toBe(DUEL.roundTimeMs)
+
+		s.advance(DUEL.roundTimeMs)
+		expect(s.phase).toBe('roundOver')
+		expect(s.nextDueAt()).toBe(Infinity)
+	})
+})
+
+describe('DuelSim: signatures', () => {
+	it('combo bonus grows with the chain and caps', () => {
+		// Goblin's combo: +2 per link, max +6. Landings every 300ms stay in chain.
+		const s = sim(FIGHTERS.goblin, HERO)
+		for (let i = 0; i < 6; i++) s.attack('p1', 'jab', false, i * 300)
+		s.advance(2000)
+		expect(hitDamages(s.drain())).toEqual([4, 6, 8, 10, 10, 10])
+	})
+
+	it('guard lengthens the windup of attacks aimed at it', () => {
+		const s = sim(HERO, FIGHTERS.skeleton)
+		s.attack('p1', 'jab', false, 0) // into the guard: 300 x 1.2
+		s.attack('p2', 'jab', false, 0) // into hero: 320
+		const started = attacksStarted(s.drain())
+		expect(started.find((e) => e.side === 'p1')).toMatchObject({
+			landsAt: 360,
+		})
+		expect(started.find((e) => e.side === 'p2')).toMatchObject({
+			landsAt: 320,
+		})
+	})
+
+	it('guard windup multiplies with windupScale', () => {
+		const s = sim(HERO, FIGHTERS.skeleton, { windupScale: { p1: 2 } })
+		s.attack('p1', 'jab', false, 0)
+		expect(attacksStarted(s.drain())[0]).toMatchObject({ landsAt: 720 })
+	})
+
+	describe('poison', () => {
+		// Meter cost is not what these tests are about.
+		const freeSpecial = variant(FIGHTERS.mushroom, 'special', {
+			meterCost: 0,
+		})
+
+		it('ticks once a second for its duration, then stops', () => {
+			const s = sim(freeSpecial, HERO)
+			s.attack('p1', 'special', false, 0) // lands 1300, poison until 6300
+			s.advance(2299)
+			expect(s.fighters.p2.hp).toBe(HERO.maxHp - 16)
+			s.advance(2300)
+			expect(s.fighters.p2.hp).toBe(HERO.maxHp - 16 - 3)
+			s.advance(6299)
+			expect(s.fighters.p2.hp).toBe(HERO.maxHp - 16 - 12)
+			s.advance(6300)
+			expect(s.fighters.p2.hp).toBe(HERO.maxHp - 16 - 15)
+			s.advance(10_000)
+			expect(s.fighters.p2.hp).toBe(HERO.maxHp - 16 - 15)
+			expect(s.fighters.p2.poison).toBeNull()
+			expect(poisonDamages(s.drain())).toEqual([3, 3, 3, 3, 3])
+		})
+
+		it('a new poison refreshes the timer instead of stacking', () => {
+			const s = sim(freeSpecial, HERO)
+			s.attack('p1', 'special', false, 0) // lands 1300
+			s.attack('p1', 'special', false, 3100) // lands 4400, refresh to 9400
+			s.advance(20_000)
+			// Ticks 2300, 3300, 4300 from the first; 5400..9400 from the refresh.
+			expect(poisonDamages(s.drain())).toEqual(Array(8).fill(3))
+		})
+
+		it('can finish a fighter, ending the round', () => {
+			const weak = variant(FIGHTERS.mushroom, 'special', {
+				meterCost: 0,
+				damage: 5,
+			})
+			const s = sim(weak, HERO, { maxHp: { p2: 12 } })
+			s.attack('p1', 'special', false, 0) // hit 5 -> 7, ticks 4, 1, 0
+			s.advance(4299)
+			expect(s.phase).toBe('fight')
+			expect(s.fighters.p2.hp).toBe(1)
+			s.advance(4300)
+			expect(s.phase).toBe('roundOver')
+			expect(s.fighters.p1.roundsWon).toBe(1)
+			expect(s.drain().find((e) => e.t === 'roundOver')).toMatchObject({
+				winner: 'p1',
+				reason: 'ko',
+			})
+		})
+
+		it('is cleared on a new round', () => {
+			const poisoner = variant(
+				variant(FIGHTERS.mushroom, 'special', { meterCost: 0 }),
+				'jab',
+				{ damage: 999 },
+			)
+			const s = sim(poisoner, HERO)
+			s.attack('p1', 'special', false, 0) // poisons p2 until 6300
+			s.attack('p1', 'jab', false, 1400) // KO at 1700, before any tick
+			s.advance(1700)
+			expect(s.phase).toBe('roundOver')
+			s.startRound(5000)
+			expect(s.fighters.p2.poison).toBeNull()
+			s.drain()
+			s.advance(20_000)
+			expect(poisonDamages(s.drain())).toEqual([])
+		})
+	})
+
+	describe('drain', () => {
+		it('moves meter from the hit side and emits an event', () => {
+			// Eye hits hero. Eye gains 8 for the hit, hero gains 5 for being hit,
+			// then the drain takes min(hero 5, 6, room) = 5 from hero.
+			const s = sim(HERO, FIGHTERS.eye)
+			s.attack('p2', 'jab', false, 0)
+			s.advance(280)
+			expect(s.fighters.p1.meter).toBe(0)
+			expect(s.fighters.p2.meter).toBe(13)
+			expect(s.drain()).toContainEqual({
+				t: 'drain',
+				from: 'p1',
+				amount: 5,
+			})
+		})
+
+		it('steals at most meterPerHit', () => {
+			const s = sim(HERO, FIGHTERS.eye)
+			s.fighters.p1.meter = 20
+			s.attack('p2', 'jab', false, 0)
+			s.advance(280)
+			// hero 20 + 5 = 25, drain min(25, 6, room) = 6.
+			expect(s.fighters.p1.meter).toBe(19)
+			expect(s.fighters.p2.meter).toBe(8 + 6)
+			expect(s.drain()).toContainEqual({
+				t: 'drain',
+				from: 'p1',
+				amount: 6,
+			})
+		})
+	})
+
+	it('resolve scales damage only below its HP threshold', () => {
+		const full = sim()
+		full.attack('p1', 'jab', false, 0)
+		full.advance(300)
+		expect(hitDamages(full.drain())).toEqual([4])
+
+		// Hero at 2 of 10 HP is below the 30% threshold: 4 x 1.2 = 4.8 -> 5.
+		const low = sim(HERO, HERO, { maxHp: { p1: 10 } })
+		low.attack('p2', 'jab', false, 0) // p1 6
+		low.attack('p2', 'jab', false, 600) // p1 2
+		low.attack('p1', 'jab', false, 1200)
+		low.advance(1500)
+		expect(low.fighters.p1.hp).toBe(2)
+		expect(hitDamages(low.drain())).toEqual([4, 4, 5])
+	})
+})
+
+describe('DuelSim: granularity invariance', () => {
+	type Op =
+		| {
+				t: number
+				op: 'attack'
+				side: Side
+				move: MoveId
+				perfect: boolean
+		  }
+		| { t: number; op: 'parry'; side: Side; perfect: boolean }
+		| { t: number; op: 'mistake'; side: Side }
+
+	const END = DUEL.roundTimeMs + 5000
+
+	/**
+	 * A scripted match. The p2 mushroom starts with its meter full so its
+	 * poison special is available. Some ops are meant to be refused (staggered,
+	 * in hitstun, parrying a jab), since refusals must also agree.
+	 */
+	const OPS: Op[] = [
+		{ t: 0, op: 'attack', side: 'p1', move: 'jab', perfect: true },
+		{ t: 150, op: 'attack', side: 'p2', move: 'heavy', perfect: false },
+		{ t: 320, op: 'mistake', side: 'p1' },
+		{ t: 600, op: 'attack', side: 'p1', move: 'jab', perfect: false },
+		{ t: 1000, op: 'parry', side: 'p1', perfect: true },
+		{ t: 1100, op: 'attack', side: 'p2', move: 'special', perfect: false },
+		{ t: 1200, op: 'attack', side: 'p1', move: 'heavy', perfect: false },
+		{ t: 2800, op: 'attack', side: 'p2', move: 'special', perfect: false },
+		{ t: 2900, op: 'attack', side: 'p1', move: 'heavy', perfect: false },
+		{ t: 3000, op: 'mistake', side: 'p2' },
+		{ t: 3500, op: 'mistake', side: 'p1' },
+		{ t: 4300, op: 'attack', side: 'p1', move: 'jab', perfect: false },
+		{ t: 5200, op: 'attack', side: 'p1', move: 'jab', perfect: true },
+		{ t: 5800, op: 'attack', side: 'p2', move: 'jab', perfect: false },
+		{ t: 6000, op: 'attack', side: 'p1', move: 'heavy', perfect: false },
+		{ t: 6300, op: 'attack', side: 'p2', move: 'heavy', perfect: false },
+		{ t: 7600, op: 'mistake', side: 'p2' },
+		{ t: 8000, op: 'parry', side: 'p2', perfect: false },
+		{ t: 8500, op: 'attack', side: 'p2', move: 'jab', perfect: false },
+		{ t: 9000, op: 'attack', side: 'p1', move: 'jab', perfect: false },
+	]
+
+	/**
+	 * Plays OPS against a fresh sim. `step` is how often the clock is advanced
+	 * between ops (null: only at each op's own timestamp, and at the end).
+	 */
+	function replay(step: number | null) {
+		const s = new DuelSim({
+			fighters: { p1: HERO, p2: FIGHTERS.mushroom },
+		})
+		s.fighters.p2.meter = 100
+		const events: DuelEvent[] = []
+		const results: boolean[] = []
+		const flush = () => events.push(...s.drain())
+
+		s.startRound(0)
+		flush()
+		let now = 0
+		const catchUp = (to: number) => {
+			if (step !== null) {
+				for (let t = now + step; t < to; t += step) {
+					s.advance(t)
+					flush()
+				}
+			}
+			s.advance(to)
+			flush()
+			now = to
+		}
+
+		for (const op of OPS) {
+			catchUp(op.t)
+			if (op.op === 'attack') {
+				results.push(s.attack(op.side, op.move, op.perfect, op.t))
+			} else if (op.op === 'parry') {
+				results.push(s.parry(op.side, op.perfect, op.t))
+			} else {
+				s.mistake(op.side, op.t)
+			}
+			flush()
+		}
+		catchUp(END)
+
+		return {
+			fighters: structuredClone(s.fighters),
+			phase: s.phase,
+			round: s.round,
+			results,
+			events,
+		}
+	}
+
+	it('the scripted timeline exercises every kind of rule', () => {
+		const kinds = new Set(replay(null).events.map((e) => e.t))
+		for (const t of [
+			'attackStarted',
+			'hit',
+			'parried',
+			'interrupted',
+			'poison',
+			'mistake',
+			'roundOver',
+		] as const) {
+			expect(kinds).toContain(t)
+		}
+		expect(replay(null).results).toContain(false)
+	})
+
+	it('one advance per op gap, every 1 ms, and every 16 ms agree', () => {
+		const coarse = replay(null)
+		const everyMs = replay(1)
+		const every16 = replay(16)
+		expect(everyMs.fighters).toEqual(coarse.fighters)
+		expect(everyMs.phase).toBe(coarse.phase)
+		expect(everyMs.round).toBe(coarse.round)
+		expect(everyMs.results).toEqual(coarse.results)
+		expect(everyMs.events).toEqual(coarse.events)
+		expect(every16.fighters).toEqual(coarse.fighters)
+		expect(every16.phase).toBe(coarse.phase)
+		expect(every16.round).toBe(coarse.round)
+		expect(every16.results).toEqual(coarse.results)
+		expect(every16.events).toEqual(coarse.events)
+	})
+})

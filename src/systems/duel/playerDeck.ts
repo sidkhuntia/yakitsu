@@ -7,7 +7,8 @@
  */
 
 import { TypingEngine } from '../typingEngine'
-import { MOVES, type MoveId } from './duelTuning'
+import type { MoveId } from './duelTuning'
+import type { FighterDef } from './fighters'
 import { mixSeed, seededRng } from './rng'
 
 export type Slot = MoveId | 'block'
@@ -65,12 +66,16 @@ export class PlayerDeck {
 	 * @param seed  the match seed. Two decks built with the same seed deal the
 	 *   same n-th word to each slot, which is what makes an online match fair:
 	 *   neither player can be luckier with their words.
+	 * @param fighter  supplies each attack card's word tier and the special's
+	 *   meter cost
 	 */
 	constructor(
 		private readonly pick: WordPicker,
 		readonly seed: number,
+		readonly fighter: FighterDef,
 	) {
-		for (const slot of MOVE_SLOTS) this.deal(slot, MOVES[slot].tier)
+		for (const slot of MOVE_SLOTS)
+			this.deal(slot, this.fighter.moves[slot].tier)
 	}
 
 	get active(): Slot | null {
@@ -160,7 +165,8 @@ export class PlayerDeck {
 		this.activeSlot = null
 		this.suspendedSlot = null
 		for (const slot of MOVE_SLOTS) this.cards.delete(slot)
-		for (const slot of MOVE_SLOTS) this.deal(slot, MOVES[slot].tier)
+		for (const slot of MOVE_SLOTS)
+			this.deal(slot, this.fighter.moves[slot].tier)
 	}
 
 	/**
@@ -178,7 +184,7 @@ export class PlayerDeck {
 
 	isUnlocked(slot: Slot, meter: number): boolean {
 		if (slot === 'block') return true
-		return meter >= MOVES[slot].meterCost
+		return meter >= this.fighter.moves[slot].meterCost
 	}
 
 	/** The attack card parked behind the block word, if any. */
@@ -220,7 +226,7 @@ export class PlayerDeck {
 		}
 		this.activeSlot = null
 		if (card.slot === 'block') this.clearBlock()
-		else this.deal(card.slot, MOVES[card.slot].tier)
+		else this.deal(card.slot, this.fighter.moves[card.slot].tier)
 		return done
 	}
 

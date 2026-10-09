@@ -1,34 +1,42 @@
 /**
- * The duel referee: HP, meter, pending attacks, parries, rounds.
+ * The duel referee: HP, meter, pending attacks, parries, poison, rounds.
  *
  * Pure and clock-injected. Nothing here reads Phaser, the DOM or `Date.now()`,
  * and both fighters go through the same `attack` / `parry` calls. That is
  * deliberate: for online play this same class runs on the server, fed by
  * actions from two clients, and the scene becomes a renderer of its events.
+ *
+ * Time is driven by `advance(now)`, which resolves every due item (a landing,
+ * a poison tick, the round clock) at its own timestamp, in time order. Calling
+ * `advance` coarsely or finely therefore gives the same result; see
+ * `advance` below.
  */
 
-import { DUEL, other, type Side } from './duelTuning'
+import type { FighterDef, FighterMove } from './fighters'
+import { DUEL, other, type MoveId, type Side } from './duelTuning'
 
-export interface AttackSpec {
-	/** Free-form id for the renderer ("jab", "lunge", ...). */
-	move: string
+const SIDES: readonly Side[] = ['p1', 'p2']
+
+/** Poison ticks once a second for its duration. */
+const POISON_TICK_MS = 1000
+
+interface PendingAttack {
+	move: MoveId
 	damage: number
-	/** Time from now until the hit lands. For the AI this is the telegraph. */
-	startupMs: number
+	startedAt: number
+	landsAt: number
+	perfect: boolean
+	armored: boolean
 	interrupts: boolean
-	/** Cannot be interrupted; the only answer is a parry. */
-	armored?: boolean
-	/** Parrying it staggers the attacker and pays meter. Default true. */
-	rewardsParry?: boolean
+	blockTier: number | null
 	hitstunMs: number
-	meterCost?: number
-	/** Finished without a mistake. Scales damage. */
-	perfect?: boolean
 }
 
-interface PendingAttack extends AttackSpec {
-	landsAt: number
-	startedAt: number
+export interface PoisonState {
+	dps: number
+	/** The poison ends after this time. */
+	until: number
+	nextTickAt: number
 }
 
 export interface FighterState {
@@ -46,17 +54,27 @@ export interface FighterState {
 	lastHitAt: number
 	/** Last time this fighter started an attack, for the passivity rule. */
 	lastAttackAt: number
+	/** Set by the opponent's poison signature. Null when not poisoned. */
+	poison: PoisonState | null
 }
 
 export type DuelPhase = 'waiting' | 'fight' | 'roundOver' | 'matchOver'
 
 export type DuelEvent =
 	| { t: 'roundStart'; round: number }
-	| { t: 'attackStarted'; side: Side; move: string; landsAt: number }
+	| {
+			t: 'attackStarted'
+			side: Side
+			move: MoveId
+			landsAt: number
+			/** Tier of the block word the defender must type, or null. */
+			blockTier: number | null
+			armored: boolean
+	  }
 	| {
 			t: 'hit'
 			attacker: Side
-			move: string
+			move: MoveId
 			damage: number
 			counter: boolean
 			perfect: boolean
@@ -64,14 +82,18 @@ export type DuelEvent =
 	| {
 			t: 'parried'
 			defender: Side
-			move: string
+			move: MoveId
 			perfect: boolean
-			/** False for a plain deflect: no stagger, no meter. */
+			/** False for a passive defender: no stagger, no meter. */
 			rewarded: boolean
 			/** HP the defender lost anyway, from being passive. */
 			chip: number
 	  }
-	| { t: 'interrupted'; side: Side; move: string }
+	| { t: 'interrupted'; side: Side; move: MoveId }
+	/** `side` is the victim. */
+	| { t: 'poison'; side: Side; damage: number }
+	/** Meter stolen from `from` by a drain signature. */
+	| { t: 'drain'; from: Side; amount: number }
 	| { t: 'mistake'; side: Side }
 	| {
 			t: 'roundOver'
@@ -93,40 +115,65 @@ function freshFighter(maxHp: number, roundsWon = 0): FighterState {
 		chain: 0,
 		lastHitAt: -Infinity,
 		lastAttackAt: 0,
+		poison: null,
 	}
 }
 
 export interface DuelOptions {
-	/**
-	 * Per-side health. Online both sides get the default; the ladder raises
-	 * the goblin's so a round lasts the same time at every level's target
-	 * speed, instead of a fast typist deleting it before its attacks matter.
-	 */
+	fighters: Record<Side, FighterDef>
+	/** Overrides FighterDef.maxHp (the ladder raises the AI's). */
 	maxHp?: Partial<Record<Side, number>>
+	/** Multiplier on windups of attacks thrown BY this side. Default 1. */
+	windupScale?: Partial<Record<Side, number>>
+}
+
+/** Something `advance` has to resolve. */
+type Due =
+	| { at: number; kind: 'roundEnd' }
+	| { at: number; kind: 'landing' | 'tick'; side: Side }
+
+/** Ties at one timestamp: landings, then ticks, then round end. */
+const DUE_RANK: Record<Due['kind'], number> = {
+	landing: 0,
+	tick: 1,
+	roundEnd: 2,
+}
+
+function compareDue(a: Due, b: Due): number {
+	const sideA = 'side' in a && a.side === 'p2' ? 1 : 0
+	const sideB = 'side' in b && b.side === 'p2' ? 1 : 0
+	return a.at - b.at || DUE_RANK[a.kind] - DUE_RANK[b.kind] || sideA - sideB
 }
 
 export class DuelSim {
+	readonly defs: Record<Side, FighterDef>
 	readonly fighters: Record<Side, FighterState>
+	private readonly windupScale: Record<Side, number>
 
-	constructor(options: DuelOptions = {}) {
+	constructor(options: DuelOptions) {
+		this.defs = options.fighters
 		this.fighters = {
-			p1: freshFighter(options.maxHp?.p1 ?? DUEL.maxHp),
-			p2: freshFighter(options.maxHp?.p2 ?? DUEL.maxHp),
+			p1: freshFighter(options.maxHp?.p1 ?? options.fighters.p1.maxHp),
+			p2: freshFighter(options.maxHp?.p2 ?? options.fighters.p2.maxHp),
+		}
+		this.windupScale = {
+			p1: options.windupScale?.p1 ?? 1,
+			p2: options.windupScale?.p2 ?? 1,
 		}
 	}
 
 	phase: DuelPhase = 'waiting'
 	round = 0
 	private roundEndsAt = 0
-	private now = 0
 	private events: DuelEvent[] = []
 
 	/** Begin the next round. Meter carries over; HP and state do not. */
 	startRound(now: number): void {
+		// Whatever was due before the new round belongs to the old one.
+		this.advance(now)
 		if (this.phase === 'matchOver') return
-		this.now = now
 		this.round++
-		for (const side of ['p1', 'p2'] as const) {
+		for (const side of SIDES) {
 			const prev = this.fighters[side]
 			this.fighters[side] = {
 				...freshFighter(prev.maxHp, prev.roundsWon),
@@ -173,25 +220,57 @@ export class DuelSim {
 		)
 	}
 
-	/** Returns false when the attack is not allowed right now. */
-	attack(side: Side, spec: AttackSpec, now: number): boolean {
+	/**
+	 * Earliest time `side` could start an attack if nothing else happens.
+	 * Infinity while its own attack is pending or no round is running.
+	 */
+	readyAt(side: Side): number {
+		const f = this.fighters[side]
+		if (this.phase !== 'fight' || f.pending !== null) return Infinity
+		return Math.max(f.staggerUntil, f.hitstunUntil)
+	}
+
+	/**
+	 * Start `move` for `side`. Returns false when it is not allowed right now.
+	 *
+	 * The windup is the telegraph the defender sees. It is lengthened when the
+	 * defender is a guard fighter, and scaled by this side's `windupScale`.
+	 */
+	attack(side: Side, move: MoveId, perfect: boolean, now: number): boolean {
 		this.advance(now)
 		if (!this.canAct(side, now)) return false
 		const f = this.fighters[side]
-		const cost = spec.meterCost ?? 0
-		if (f.meter < cost) return false
-		f.meter -= cost
+		const def: FighterMove = this.defs[side].moves[move]
+		if (f.meter < def.meterCost) return false
+		f.meter -= def.meterCost
 		f.lastAttackAt = now
-		f.pending = {
-			...spec,
+
+		const defenderSig = this.defs[other(side)].signature
+		const guardScale =
+			defenderSig.kind === 'guard' ? defenderSig.incomingWindupScale : 1
+		// Rounded so every landing sits on a whole millisecond.
+		const windup = Math.round(
+			def.windupMs * this.windupScale[side] * guardScale,
+		)
+		const pending: PendingAttack = {
+			move,
+			damage: def.damage,
 			startedAt: now,
-			landsAt: now + Math.max(0, spec.startupMs),
+			landsAt: now + Math.max(0, windup),
+			perfect,
+			armored: def.armored,
+			interrupts: def.interrupts,
+			blockTier: def.blockTier,
+			hitstunMs: def.hitstunMs,
 		}
+		f.pending = pending
 		this.emit({
 			t: 'attackStarted',
 			side,
-			move: spec.move,
-			landsAt: f.pending.landsAt,
+			move,
+			landsAt: pending.landsAt,
+			blockTier: pending.blockTier,
+			armored: pending.armored,
 		})
 		return true
 	}
@@ -199,20 +278,21 @@ export class DuelSim {
 	/**
 	 * `side` deflects the opponent's incoming attack.
 	 *
-	 * Succeeds only while an attack is actually in flight, so there is no
-	 * value in parrying pre-emptively. A successful parry cancels the attack
-	 * and opens the attacker up for a counter.
+	 * Succeeds only while an attack is in flight whose `blockTier` is not
+	 * null, so jabs cannot be parried. A successful parry cancels the attack
+	 * and opens the attacker up for a counter. A passive defender's parry only
+	 * deflects: no stagger, no meter, but chip damage.
 	 */
 	parry(side: Side, perfect: boolean, now: number): boolean {
 		this.advance(now)
 		if (this.phase !== 'fight') return false
 		const attacker = this.fighters[other(side)]
 		const incoming = attacker.pending
-		if (!incoming) return false
+		if (!incoming || incoming.blockTier === null) return false
 
 		attacker.pending = null
 		const passive = this.isPassive(side, now)
-		const rewarded = incoming.rewardsParry !== false && !passive
+		const rewarded = !passive
 		if (rewarded) {
 			attacker.staggerUntil = now + DUEL.parryStaggerMs
 			this.gainMeter(
@@ -244,34 +324,38 @@ export class DuelSim {
 		this.emit({ t: 'mistake', side })
 	}
 
-	/** Resolve everything due by `now`. Call every frame. */
+	/**
+	 * Resolve everything due by `now`, each at its own timestamp.
+	 *
+	 * Repeatedly takes the earliest due item (a pending landing, a poison
+	 * tick, the round clock) with time <= `now`, and resolves it. Nothing a
+	 * resolution creates is due earlier than the item that created it: a
+	 * landing can only schedule ticks one second later. So the order is fixed
+	 * by the timestamps alone, and it does not matter whether the caller
+	 * advances once or every millisecond. Same-time ties: landings, then
+	 * ticks, then round end; p1 before p2.
+	 */
 	advance(now: number): void {
-		this.now = Math.max(this.now, now)
-		if (this.phase !== 'fight') return
-
-		// Resolve in landing order so two near-simultaneous attacks interact
-		// the same way regardless of which side is listed first.
-		const due = (['p1', 'p2'] as const)
-			.filter((s) => {
-				const p = this.fighters[s].pending
-				return p !== null && p.landsAt <= this.now
-			})
-			.sort(
-				(a, b) =>
-					this.fighters[a].pending!.landsAt -
-					this.fighters[b].pending!.landsAt,
-			)
-
-		for (const side of due) {
-			const pending = this.fighters[side].pending
-			// An earlier hit this frame may have interrupted it.
-			if (!pending) continue
-			this.fighters[side].pending = null
-			this.land(side, pending)
-			if (this.phase !== 'fight') return
+		while (this.phase === 'fight') {
+			const due = this.nextDue(now)
+			if (!due) return
+			this.fire(due)
 		}
+	}
 
-		if (this.now >= this.roundEndsAt) this.endRoundOnTime()
+	/**
+	 * Earliest future time at which `advance` would change anything: a
+	 * landing, a poison tick, or the round clock. Infinity when none.
+	 */
+	nextDueAt(): number {
+		if (this.phase !== 'fight') return Infinity
+		let next = this.roundEndsAt
+		for (const side of SIDES) {
+			const f = this.fighters[side]
+			if (f.pending) next = Math.min(next, f.pending.landsAt)
+			if (f.poison) next = Math.min(next, f.poison.nextTickAt)
+		}
+		return next
 	}
 
 	/** Hand the renderer everything that happened since the last drain. */
@@ -283,17 +367,65 @@ export class DuelSim {
 
 	// ----------------------------------------------------------------- internals
 
+	private nextDue(limit: number): Due | null {
+		const candidates: Due[] = [{ at: this.roundEndsAt, kind: 'roundEnd' }]
+		for (const side of SIDES) {
+			const f = this.fighters[side]
+			if (f.pending) {
+				candidates.push({
+					at: f.pending.landsAt,
+					kind: 'landing',
+					side,
+				})
+			}
+			if (f.poison) {
+				candidates.push({
+					at: f.poison.nextTickAt,
+					kind: 'tick',
+					side,
+				})
+			}
+		}
+		const due = candidates.filter((d) => d.at <= limit).sort(compareDue)
+		return due[0] ?? null
+	}
+
+	private fire(due: Due): void {
+		if (due.kind === 'roundEnd') {
+			this.endRoundOnTime()
+			return
+		}
+		if (due.kind === 'tick') {
+			this.tickPoison(due.side, due.at)
+			return
+		}
+		const f = this.fighters[due.side]
+		const hit = f.pending
+		if (!hit) return
+		f.pending = null
+		this.land(due.side, hit)
+	}
+
+	/**
+	 * Damage order: base, x perfect, x counter, x resolve (attacker below its
+	 * threshold), + combo (attacker, from the defender's chain), then round.
+	 */
 	private land(attacker: Side, hit: PendingAttack): void {
 		const defenderSide = other(attacker)
 		const defender = this.fighters[defenderSide]
+		const attackerState = this.fighters[attacker]
+		const sig = this.defs[attacker].signature
 		const counter = hit.landsAt < defender.staggerUntil
 
 		let damage = hit.damage
 		if (hit.perfect) damage *= DUEL.perfectMultiplier
 		if (counter) damage *= DUEL.counterMultiplier
-		damage = Math.round(damage)
-
-		defender.hp = Math.max(0, defender.hp - damage)
+		if (
+			sig.kind === 'resolve' &&
+			attackerState.hp / attackerState.maxHp <= sig.hpThreshold
+		) {
+			damage *= sig.damageScale
+		}
 		// Each hit that follows quickly on the last stuns for less, so no
 		// rhythm of attacks can keep a fighter locked down indefinitely.
 		defender.chain =
@@ -301,6 +433,12 @@ export class DuelSim {
 				? defender.chain + 1
 				: 0
 		defender.lastHitAt = hit.landsAt
+		if (sig.kind === 'combo') {
+			damage += Math.min(sig.maxBonus, defender.chain * sig.bonusPerLink)
+		}
+		damage = Math.round(damage)
+
+		defender.hp = Math.max(0, defender.hp - damage)
 		const stunScale = Math.max(
 			0,
 			1 - defender.chain * DUEL.hitstunDecayPerHit,
@@ -321,8 +459,27 @@ export class DuelSim {
 			move: hit.move,
 			damage,
 			counter,
-			perfect: Boolean(hit.perfect),
+			perfect: hit.perfect,
 		})
+
+		if (sig.kind === 'poison' && hit.move === sig.move) {
+			const until = hit.landsAt + sig.durationMs
+			const nextTickAt = hit.landsAt + POISON_TICK_MS
+			// A refresh restarts the timer; poison never stacks.
+			if (nextTickAt <= until) {
+				defender.poison = { dps: sig.dps, until, nextTickAt }
+			}
+		}
+
+		if (sig.kind === 'drain') {
+			const room = DUEL.maxMeter - attackerState.meter
+			const amount = Math.min(defender.meter, sig.meterPerHit, room)
+			if (amount > 0) {
+				defender.meter -= amount
+				attackerState.meter += amount
+				this.emit({ t: 'drain', from: defenderSide, amount })
+			}
+		}
 
 		if (hit.interrupts && defender.pending && !defender.pending.armored) {
 			const cancelled = defender.pending
@@ -337,6 +494,17 @@ export class DuelSim {
 		if (defender.hp <= 0) this.endRound(attacker, 'ko')
 	}
 
+	private tickPoison(side: Side, at: number): void {
+		const f = this.fighters[side]
+		const poison = f.poison
+		if (!poison) return
+		f.hp = Math.max(0, f.hp - poison.dps)
+		this.emit({ t: 'poison', side, damage: poison.dps })
+		const nextTickAt = at + POISON_TICK_MS
+		f.poison = nextTickAt <= poison.until ? { ...poison, nextTickAt } : null
+		if (f.hp <= 0) this.endRound(other(side), 'ko')
+	}
+
 	private endRoundOnTime(): void {
 		const { p1, p2 } = this.fighters
 		// Compare fractions: the goblin can have more raw HP than the player.
@@ -347,11 +515,14 @@ export class DuelSim {
 	}
 
 	private endRound(winner: Side | null, reason: 'ko' | 'time'): void {
-		for (const f of Object.values(this.fighters)) f.pending = null
+		for (const f of Object.values(this.fighters)) {
+			f.pending = null
+			f.poison = null
+		}
 		if (winner) this.fighters[winner].roundsWon++
 		this.emit({ t: 'roundOver', winner, reason, round: this.round })
 
-		const champion = (['p1', 'p2'] as const).find(
+		const champion = SIDES.find(
 			(s) => this.fighters[s].roundsWon >= DUEL.roundsToWin,
 		)
 		if (champion) {

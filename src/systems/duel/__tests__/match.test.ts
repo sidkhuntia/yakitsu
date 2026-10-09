@@ -17,7 +17,7 @@ const TIER_LEN = [3, 4, 6, 9, 12]
  *
  * The filler is deliberately not vowels. The deck gives the active attack
  * priority over a block word whose first letter equals the attack's next
- * letter (see the bug note in the reply that added this file), so a stub
+ * letter (block dealing avoids that, see `PlayerDeck.liveLetters`), so a stub
  * whose filler collides with block first letters would make parries depend
  * on that routing rather than on the match rules under test.
  */

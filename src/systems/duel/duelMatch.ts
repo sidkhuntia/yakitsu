@@ -151,9 +151,13 @@ export class DuelMatch implements BotHost {
 		while (t <= now) {
 			this.settle(t)
 			// Every step must consume something, so time moves strictly
-			// forward. A stall here is a bug, and failing loudly beats spinning.
+			// forward. A stall here is a bug. Throwing would crash the live
+			// scene, so log it and stop advancing.
 			const next = this.nextDueAt()
-			if (next <= t) throw new Error(`DuelMatch: no progress at t=${t}`)
+			if (next <= t) {
+				console.error(`DuelMatch: no progress at t=${t}`)
+				break
+			}
 			t = next
 		}
 		this.settle(now)
@@ -204,8 +208,11 @@ export class DuelMatch implements BotHost {
 			// only trips on a bug. Allow a few repeats in case of a zero-length
 			// window, then fail rather than spin.
 			stalls = t === prev ? stalls + 1 : 0
-			if (stalls > 8)
-				throw new Error(`DuelMatch.step: no progress at t=${t}`)
+			if (stalls > 8) {
+				// Log rather than throw, so the live scene keeps running.
+				console.error(`DuelMatch.step: no progress at t=${t}`)
+				break
+			}
 			prev = t
 
 			this.advance(t)

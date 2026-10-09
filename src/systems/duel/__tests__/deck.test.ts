@@ -226,6 +226,21 @@ describe('seeded decks', () => {
 		expect(a.offerBlock(1)).toBe(b.offerBlock(1))
 	})
 
+	it('block words follow the same typing history the same way', () => {
+		// Each round starts a heavy, offers a block over it, then releases it.
+		const run = (deck: PlayerDeck) => {
+			const offers: string[] = []
+			for (let i = 0; i < 4; i++) {
+				deck.key(deck.card('heavy')!.word[0], 0)
+				offers.push(deck.offerBlock(0))
+				deck.clearBlock()
+				deck.backspace()
+			}
+			return offers
+		}
+		expect(run(seeded(3))).toEqual(run(seeded(3)))
+	})
+
 	it('mixSeed separates streams', () => {
 		expect(mixSeed(1, 2, 3)).not.toBe(mixSeed(1, 3, 2))
 		expect(mixSeed(1, 2, 3)).toBe(mixSeed(1, 2, 3))
@@ -243,6 +258,49 @@ describe('seeded decks', () => {
 			expect(inTier(goblinHeavy, 1)).toBe(true)
 			expect(inTier(heroHeavy, 2)).toBe(true)
 		}
+	})
+})
+
+describe('block words never swallowed by the active attack', () => {
+	it('a block word does not start with a letter the active attack still needs', () => {
+		// HAEIOU's E is next after H and A. EXX would have been swallowed by it.
+		const words = {
+			0: ['JXX', 'EXX', 'KXX'],
+			2: ['HAEIOU'],
+			3: ['SHOWSTOPPER'],
+		}
+		const deck = new PlayerDeck(pickerFrom(words), 1, FIGHTERS.hero)
+		deck.key('H', 0)
+		deck.key('A', 0)
+		const block = deck.offerBlock(0)
+		expect(block).not.toBe('EXX')
+		expect('EIOU').not.toContain(block[0])
+		expect(deck.key(block[0], 0)).toEqual({
+			kind: 'progress',
+			slot: 'block',
+		})
+		expect(deck.suspended).toBe('heavy')
+	})
+
+	it('still deals a word when every candidate collides', () => {
+		let calls = 0
+		// Returns the first word the reject accepts, or the first word anyway.
+		const lists: Record<number, string[]> = {
+			0: ['JXX', 'EXX'],
+			2: ['HAEIOU'],
+		}
+		const picker: WordPicker = (tier, reject) => {
+			calls++
+			const list = lists[tier] ?? ['SHOWSTOPPER']
+			return list.find((w) => !reject(w)) ?? list[0]
+		}
+		const deck = new PlayerDeck(picker, 1, FIGHTERS.hero)
+		deck.key('H', 0)
+		deck.key('A', 0)
+		calls = 0
+		// The strict pass finds nothing, so the loose pass deals EXX.
+		expect(deck.offerBlock(0)).toBe('EXX')
+		expect(calls).toBe(2)
 	})
 })
 

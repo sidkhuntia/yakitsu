@@ -237,6 +237,25 @@ export class PlayerDeck {
 		return undefined
 	}
 
+	/**
+	 * Letters still to be typed on the card in hand and on the one parked
+	 * behind a block. A typo leaves the caret past the mistake, but backspacing
+	 * returns to it, so the count starts at the first wrong letter.
+	 */
+	private liveLetters(): Set<string> {
+		const letters = new Set<string>()
+		for (const slot of [this.activeSlot, this.suspendedSlot]) {
+			if (!slot || slot === 'block') continue
+			const card = this.cards.get(slot)
+			if (!card) continue
+			const states = card.engine.getStates()
+			const wrong = states.indexOf('wrong')
+			const from = wrong === -1 ? card.engine.getCaret() : wrong
+			for (const ch of card.word.slice(from)) letters.add(ch)
+		}
+		return letters
+	}
+
 	private deal(slot: Slot, tier: number): Card {
 		const previous = this.cards.get(slot)?.word
 		const taken = new Set(
@@ -244,15 +263,30 @@ export class PlayerDeck {
 				.filter((card) => card.slot !== slot)
 				.map((card) => card.word[0]),
 		)
+		const loose = (w: string) => w === previous || taken.has(w[0])
 		// Counter-based: the n-th word of a slot comes from its own seed, so it
 		// does not shift when other slots are dealt in a different order.
 		const n = this.dealt[slot]++
-		const rng = seededRng(mixSeed(this.seed, SLOT_STREAM[slot], n))
-		const word = this.pick(
-			tier,
-			(w) => w === previous || taken.has(w[0]),
-			rng,
-		).toUpperCase()
+		const seed = mixSeed(this.seed, SLOT_STREAM[slot], n)
+		let raw: string
+		if (slot === 'block') {
+			// key() gives the active attack priority over a switch. A block word
+			// starting with a letter the player still has to type on the card in
+			// hand would therefore advance that attack and never start the block.
+			// Remaining letters only shrink as they are typed, so a word that
+			// clears this stricter rule keeps clearing it while the block is up.
+			const live = this.liveLetters()
+			const strict = (w: string) =>
+				loose(w) || live.has(w[0].toUpperCase())
+			raw = this.pick(tier, strict, seededRng(seed))
+			// A tiny pool may leave no word that clears the strict rule. A word
+			// must still be dealt, so fall back to the original rule. The retry
+			// reuses the same seed, so the result stays deterministic.
+			if (strict(raw)) raw = this.pick(tier, loose, seededRng(seed))
+		} else {
+			raw = this.pick(tier, loose, seededRng(seed))
+		}
+		const word = raw.toUpperCase()
 		const card: Card = {
 			slot,
 			word,

@@ -4,8 +4,10 @@ import { Juice } from '../systems/Juice'
 import { Particles } from '../systems/Hud'
 import { displayFont } from '../systems/font'
 import { loadData, recordDuel, type Settings } from '../systems/persistence'
-import { DuelSim, type DuelEvent } from '../systems/duel/duelSim'
-import { GoblinBrain } from '../systems/duel/goblinBrain'
+import type { DuelSim } from '../systems/duel/duelSim'
+import { DuelMatch, type MatchEvent } from '../systems/duel/duelMatch'
+import { FIGHTERS } from '../systems/duel/fighters'
+import { TypistBot } from '../systems/duel/typistBot'
 import { mixSeed, randomSeed, seededRng } from '../systems/duel/rng'
 import {
 	MAX_LEVEL,
@@ -13,17 +15,14 @@ import {
 	duelLevel,
 	type DuelLevel,
 } from '../systems/duel/duelLevels'
-import { PlayerDeck, MOVE_SLOTS, type Slot } from '../systems/duel/playerDeck'
+import {
+	MOVE_SLOTS,
+	type PlayerDeck,
+	type Slot,
+} from '../systems/duel/playerDeck'
 import { CardView } from '../systems/duel/CardView'
 import { DuelHud } from '../systems/duel/DuelHud'
-import {
-	DUEL,
-	ENEMY_ATTACKS,
-	MOVES,
-	enemyWindupMs,
-	type EnemyAttackDef,
-	type MoveId,
-} from '../systems/duel/duelTuning'
+import { DUEL, type MoveId, type Side } from '../systems/duel/duelTuning'
 
 type Phase = 'intro' | 'fight' | 'between' | 'over'
 
@@ -34,6 +33,8 @@ const GOBLIN_SCALE = 3
 /** Goblin attack sheet runs at 16fps; the spear lands on frame 6. */
 const GOBLIN_ATTACK_FPS = 16
 const GOBLIN_STRIKE_LEAD_MS = (6 / GOBLIN_ATTACK_FPS) * 1000
+/** The hero holds through most of its windup and dashes in over this long. */
+const HERO_DASH_MAX_MS = 180
 
 const BG_LAYERS = [11, 8, 5, 3, 2]
 
@@ -44,30 +45,45 @@ const CARD_STYLE: Record<Slot, { accent: number; fontSize: number }> = {
 	block: { accent: 0xff5252, fontSize: 44 },
 }
 
-interface Telegraph {
-	def: EnemyAttackDef
-	startedAt: number
+/**
+ * The goblin's attack in flight, from the moment it starts to its landing.
+ * Only one can be in flight at a time, so a single slot is enough.
+ */
+interface Swing {
+	move: MoveId
+	armored: boolean
+	/** A block word is offered, so the windup gets the full telegraph. */
+	parryable: boolean
 	landsAt: number
 	striking: boolean
+}
+
+/** The block word on the player's screen, and its timer. */
+interface BlockOffer {
+	landsAt: number
+	offeredAt: number
 }
 
 /**
  * Prototype duel: you vs the goblin, best of three, on a level ladder.
  *
- * Rules live in `DuelSim`; this scene only feeds it input and draws its
- * events. The sim runs on its own clock (`simNow`), which advances in real
- * time and stops only for pause. Hitstop and slow-mo are purely visual: when
- * they also slowed the sim, every hit you landed froze the goblin's windup
- * while your keystrokes kept counting, which was free typing time.
+ * Both fighters play by the same rules. `DuelMatch` owns the referee, both
+ * decks and the block offers; the goblin is a `TypistBot` pressing keys
+ * through that same path a human uses. This scene only feeds input in and
+ * draws the events that come out.
+ *
+ * The match runs on its own clock (`simNow`), which advances in real time and
+ * stops only for pause. Hitstop and slow-mo are purely visual: when they also
+ * slowed the match, every hit you landed froze the goblin's windup while your
+ * keystrokes kept counting, which was free typing time.
  */
 export default class Duel extends Phaser.Scene {
 	private level!: DuelLevel
 	/** One number both players would share online; it fixes every word. */
 	private seed = 0
 	private settings!: Settings
-	private sim!: DuelSim
-	private brain!: GoblinBrain
-	private deck!: PlayerDeck
+	private match!: DuelMatch
+	private bot!: TypistBot
 	private hud!: DuelHud
 	private juice!: Juice
 	private particles!: Particles
@@ -75,15 +91,21 @@ export default class Duel extends Phaser.Scene {
 	private player!: Phaser.GameObjects.Sprite
 	private goblin!: Phaser.GameObjects.Sprite
 	private cards = new Map<Slot, CardView>()
+	/** The bot's live word above the goblin, so you can read what it types. */
+	private oppTyping?: CardView
 	private dizzy?: Phaser.GameObjects.Text
 
 	private phase: Phase = 'intro'
 	private paused = false
 	private simNow = 0
 	private clockMs: number = DUEL.roundTimeMs
-	private telegraph: Telegraph | null = null
-	/** A move finished while the player could not act, fired on recovery. */
-	private buffered: { move: MoveId; perfect: boolean } | null = null
+	private swing: Swing | null = null
+	private blockOffer: BlockOffer | null = null
+	/**
+	 * The player just finished a block word. If no `parried` follows in the
+	 * same batch, the parry came too late.
+	 */
+	private awaitingParry = false
 	private sfx: Record<string, Phaser.Sound.BaseSound> = {}
 	private music?: Phaser.Sound.BaseSound
 	private pauseText!: Phaser.GameObjects.Text
@@ -96,14 +118,24 @@ export default class Duel extends Phaser.Scene {
 		super('Duel')
 	}
 
+	/** The player's deck, read-only from here: the match owns every change. */
+	private get deck(): PlayerDeck {
+		return this.match.decks.p1
+	}
+
+	private get sim(): DuelSim {
+		return this.match.sim
+	}
+
 	init(): void {
 		this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this)
 		this.phase = 'intro'
 		this.paused = false
 		this.simNow = 0
 		this.clockMs = DUEL.roundTimeMs
-		this.telegraph = null
-		this.buffered = null
+		this.swing = null
+		this.blockOffer = null
+		this.awaitingParry = false
 		this.cards = new Map()
 		this.sfx = {}
 		this.timers = []
@@ -118,15 +150,24 @@ export default class Duel extends Phaser.Scene {
 
 		const bank = new WordBank(window.THESAURUS)
 		this.seed = randomSeed()
-		this.sim = new DuelSim({ maxHp: { p2: this.level.goblinHp } })
-		this.brain = new GoblinBrain(
+		this.match = new DuelMatch({
+			seed: this.seed,
+			fighters: { p1: FIGHTERS.hero, p2: FIGHTERS.goblin },
+			pick: (tier, reject, rng) => bank.pickFromTier(tier, reject, rng),
+			maxHp: { p2: this.level.goblinHp },
+			// Assist below 1 stretches every goblin windup, so the floor keeps
+			// a tiny setting from making the windup absurdly long.
+			windupScale: {
+				p2:
+					this.level.windupScale /
+					Math.max(0.5, this.settings.assistLevel),
+			},
+		})
+		// Same stream the old goblin brain used, so a seed fixes the bot's rolls.
+		this.bot = new TypistBot(
 			'p2',
+			this.level.bot,
 			seededRng(mixSeed(this.seed, 0xb0b)),
-			this.level.brain,
-		)
-		this.deck = new PlayerDeck(
-			(tier, reject, rng) => bank.pickFromTier(tier, reject, rng),
-			this.seed,
 		)
 		this.juice = new Juice(this, this.settings.screenShake)
 		this.particles = new Particles(this)
@@ -297,10 +338,14 @@ export default class Duel extends Phaser.Scene {
 			special: width / 2 + 330,
 		}
 		for (const slot of MOVE_SLOTS) {
-			const move = MOVES[slot]
+			const move = FIGHTERS.hero.moves[slot]
+			const cost =
+				move.meterCost >= DUEL.maxMeter
+					? 'FULL METER'
+					: `${move.meterCost} METER`
 			const caption =
-				slot === 'special'
-					? `${move.label} · ${move.damage} · FULL METER`
+				move.meterCost > 0
+					? `${move.label} · ${move.damage} · ${cost}`
 					: `${move.label} · ${move.damage}`
 			this.cards.set(
 				slot,
@@ -316,14 +361,26 @@ export default class Duel extends Phaser.Scene {
 		})
 		block.setVisible(false)
 		this.cards.set('block', block)
+		this.oppTyping = new CardView(
+			this,
+			GOBLIN_HOME_X,
+			this.groundY() - 240,
+			{
+				fontSize: 22,
+				accent: 0xff5252,
+				caption: 'GOBLIN IS TYPING',
+			},
+		)
+		this.oppTyping.setVisible(false)
 		this.renderCards()
 	}
 
 	private renderCards(): void {
 		const meter = this.sim.fighters.p1.meter
-		const active = this.deck.active
+		const deck = this.deck
+		const active = deck.active
 		for (const [slot, view] of this.cards) {
-			const card = this.deck.card(slot)
+			const card = deck.card(slot)
 			if (!card) {
 				view.setVisible(false)
 				continue
@@ -332,18 +389,36 @@ export default class Duel extends Phaser.Scene {
 			view.render(
 				card,
 				active === slot,
-				!this.deck.isUnlocked(slot, meter),
+				!deck.isUnlocked(slot, meter),
 				active !== null && active !== slot,
 			)
 		}
-		const tg = this.telegraph
+		const offer = this.blockOffer
 		this.cards
 			.get('block')
 			?.setTimer(
-				tg
-					? (tg.landsAt - this.simNow) / (tg.landsAt - tg.startedAt)
+				offer
+					? (offer.landsAt - this.simNow) /
+							Math.max(1, offer.landsAt - offer.offeredAt)
 					: null,
 			)
+	}
+
+	/**
+	 * Show the goblin's live word above it, with typed letters lit, so the
+	 * player can read what a human opponent would be typing.
+	 */
+	private renderOpponentTyping(): void {
+		const typing = this.oppTyping
+		if (!typing) return
+		const deck = this.match.decks.p2
+		const card = deck.active ? deck.card(deck.active) : undefined
+		const show =
+			card !== undefined && this.phase === 'fight' && !this.paused
+		typing.setVisible(show)
+		if (!card) return
+		typing.container.setPosition(this.goblin.x, this.goblin.y - 175)
+		typing.render(card, true, false, false)
 	}
 
 	// -------------------------------------------------------------------- input
@@ -366,7 +441,7 @@ export default class Duel extends Phaser.Scene {
 
 			if (e.key === 'Backspace') {
 				e.preventDefault()
-				this.deck.backspace()
+				this.match.backspace('p1', this.simNow)
 				this.renderCards()
 				return
 			}
@@ -376,33 +451,36 @@ export default class Duel extends Phaser.Scene {
 		})
 	}
 
+	/**
+	 * Hand a player letter to the match and play the feedback for what it
+	 * reports. Whether a key parries, buffers or does nothing is the match's
+	 * call, not the scene's.
+	 */
 	private onLetter(ch: string): void {
-		const r = this.deck.key(ch, this.sim.fighters.p1.meter)
-		switch (r.kind) {
-			case 'progress':
-				this.play('type', 1 + Math.random() * 0.1)
-				break
-			case 'mistake':
-				this.play('error')
-				this.sim.mistake('p1', this.simNow)
-				this.brain.onOpponentMistake(this.simNow)
-				if (r.slot) this.cards.get(r.slot)?.shake()
-				this.juice.shake(2, 120)
-				break
-			case 'locked':
-				this.cards.get(r.slot)?.shake()
-				this.floatText(
-					this.scale.width / 2 + 330,
-					140,
-					'NEED FULL METER',
-					'#8fa3bd',
-				)
-				break
-			case 'complete':
-				this.cards.get(r.slot)?.pop()
-				if (r.slot === 'block') this.tryParry(r.perfect)
-				else this.queueMove(r.slot, r.perfect)
-				break
+		const r = this.match.key('p1', ch, this.simNow)
+		if (r) {
+			switch (r.kind) {
+				case 'progress':
+					this.play('type', 1 + Math.random() * 0.1)
+					break
+				case 'mistake':
+					this.play('error')
+					if (r.slot) this.cards.get(r.slot)?.shake()
+					this.juice.shake(2, 120)
+					break
+				case 'locked':
+					this.cards.get(r.slot)?.shake()
+					this.floatText(
+						this.scale.width / 2 + 330,
+						140,
+						'NEED FULL METER',
+						'#8fa3bd',
+					)
+					break
+				case 'complete':
+					this.cards.get(r.slot)?.pop()
+					break
+			}
 		}
 		this.renderCards()
 	}
@@ -420,47 +498,10 @@ export default class Duel extends Phaser.Scene {
 		}
 	}
 
-	private tryParry(perfect: boolean): void {
-		// The sim is the judge; the visuals follow from its 'parried' event.
-		if (!this.sim.parry('p1', perfect, this.simNow)) {
-			this.floatText(
-				PLAYER_HOME_X,
-				this.groundY() - 260,
-				'TOO LATE',
-				'#8fa3bd',
-			)
-		}
-	}
-
-	private queueMove(move: MoveId, perfect: boolean): void {
-		this.buffered = { move, perfect }
-		this.flushBuffered()
-	}
-
-	private flushBuffered(): void {
-		if (!this.buffered || !this.sim.canAct('p1', this.simNow)) return
-		const def = MOVES[this.buffered.move]
-		const ok = this.sim.attack(
-			'p1',
-			{
-				move: def.id,
-				damage: def.damage,
-				startupMs: def.startupMs,
-				interrupts: def.interrupts,
-				hitstunMs: def.hitstunMs,
-				meterCost: def.meterCost,
-				perfect: this.buffered.perfect,
-			},
-			this.simNow,
-		)
-		if (ok) this.buffered = null
-	}
-
 	// --------------------------------------------------------------- round flow
 
 	private beginRoundIntro(): void {
 		this.phase = 'intro'
-		this.deck.resetAll()
 		this.renderCards()
 		const round = this.sim.round + 1
 		const final =
@@ -476,9 +517,9 @@ export default class Duel extends Phaser.Scene {
 		this.later(DUEL.introMs - 400, () => {
 			this.hud.announce('FIGHT!', '', 400, '#ff5252')
 			this.play('go')
-			this.sim.startRound(this.simNow)
+			this.match.startRound(this.simNow)
 			this.clockMs = DUEL.roundTimeMs
-			this.brain.reset(this.simNow)
+			this.bot.reset(this.simNow)
 			this.phase = 'fight'
 			this.resetPoses()
 			this.renderCards()
@@ -505,25 +546,20 @@ export default class Duel extends Phaser.Scene {
 		if (this.paused) return
 		this.simNow += delta
 
-		if (this.phase === 'fight') {
-			const choice = this.brain.think(
-				this.simNow,
-				this.sim,
-				this.deck.isLoaded(),
-			)
-			if (choice) this.startEnemyAttack(choice)
-			this.flushBuffered()
-			this.driveGoblinStrike()
-		}
-
-		this.sim.advance(this.simNow)
-		for (const e of this.sim.drain()) this.onEvent(e)
+		// Step the match and the bot together, then draw what came out. The
+		// goblin's swing is started after the drain, so an attack that began
+		// this frame is swung at once.
+		if (this.phase === 'fight')
+			this.match.step(this.simNow, { p2: this.bot })
+		for (const e of this.match.drain()) this.onEvent(e)
+		if (this.phase === 'fight') this.driveGoblinStrike()
 
 		// Hold the clock between rounds instead of reading 0.
-		if (this.sim.phase === 'fight')
+		if (this.phase === 'fight')
 			this.clockMs = this.sim.timeLeftMs(this.simNow)
 		this.hud.update(this.sim.fighters, this.clockMs, delta)
-		if (this.telegraph) this.renderCards()
+		this.renderCards()
+		this.renderOpponentTyping()
 		this.updatePassiveWarning()
 		this.dizzy?.setPosition(this.goblin.x, this.goblin.y - 150)
 	}
@@ -544,49 +580,22 @@ export default class Duel extends Phaser.Scene {
 		else this.passiveText.setText('PASSIVE: PARRIES LEAK DAMAGE')
 	}
 
-	private startEnemyAttack(def: EnemyAttackDef): void {
-		const word = this.deck.offerBlock(def.blockTier)
-		const windup =
-			enemyWindupMs(
-				word.length,
-				def,
-				this.level.msPerChar,
-				this.sim.round,
-				this.level.reactionMs,
-			) / Math.max(0.5, this.settings.assistLevel)
-		const ok = this.sim.attack(
-			'p2',
-			{
-				move: def.id,
-				damage: this.enemyDamage(def),
-				startupMs: windup,
-				interrupts: def.interrupts,
-				armored: def.armored,
-				rewardsParry: def.rewardsParry,
-				hitstunMs: def.hitstunMs,
-			},
-			this.simNow,
-		)
-		// Never leave a block card up for an attack that is not coming.
-		if (!ok) this.deck.clearBlock()
-	}
-
-	private enemyDamage(def: EnemyAttackDef): number {
-		return Math.round(def.damage * this.level.damageScale)
-	}
-
-	/** Start the swing so the spear connects exactly when the sim lands it. */
+	/**
+	 * Swing the goblin so its spear connects when the match lands the attack.
+	 * A jab's windup is shorter than the swing itself, so its swing starts at
+	 * once and the tween is timed to land on `landsAt`.
+	 */
 	private driveGoblinStrike(): void {
-		const tg = this.telegraph
-		if (!tg || tg.striking) return
-		if (this.simNow < tg.landsAt - GOBLIN_STRIKE_LEAD_MS) return
-		tg.striking = true
+		const s = this.swing
+		if (!s || s.striking) return
+		if (this.simNow < s.landsAt - GOBLIN_STRIKE_LEAD_MS) return
+		s.striking = true
 		this.goblin.clearTint()
 		this.goblin.play('gob-attack')
 		this.tweens.add({
 			targets: this.goblin,
 			x: PLAYER_HOME_X + 170,
-			duration: GOBLIN_STRIKE_LEAD_MS,
+			duration: Math.max(60, s.landsAt - this.simNow),
 			ease: 'Quad.easeIn',
 		})
 	}
@@ -601,33 +610,72 @@ export default class Duel extends Phaser.Scene {
 		})
 	}
 
-	private endTelegraph(): void {
-		this.telegraph = null
-		this.deck.clearBlock()
+	/** The goblin's attack is over: it landed, was parried or was interrupted. */
+	private endSwing(): void {
+		this.swing = null
 		this.goblin.clearTint()
 		this.tweens.killTweensOf(this.goblin)
 	}
 
+	/** Remove the player's block card, and forget its timer. */
+	private hideBlock(): void {
+		this.blockOffer = null
+		this.cards.get('block')?.setVisible(false)
+	}
+
 	// ----------------------------------------------------------------- events
 
-	private onEvent(e: DuelEvent): void {
+	private onEvent(e: MatchEvent): void {
 		switch (e.t) {
+			case 'key':
+				if (
+					e.side === 'p1' &&
+					e.result.kind === 'complete' &&
+					e.result.slot === 'block'
+				)
+					this.awaitingParry = true
+				break
+			case 'blockOffered':
+				if (e.side === 'p1') this.showBlock(e.landsAt, e.at)
+				break
+			case 'blockCleared':
+				if (e.side === 'p1') {
+					// The word was typed too late: the attack resolved first.
+					if (this.awaitingParry)
+						this.floatText(
+							PLAYER_HOME_X,
+							this.groundY() - 260,
+							'TOO LATE',
+							'#8fa3bd',
+						)
+					this.awaitingParry = false
+					this.hideBlock()
+				}
+				break
 			case 'attackStarted':
-				if (e.side === 'p1') this.heroDash(e.move as MoveId, e.landsAt)
-				else this.goblinTelegraph(e.move, e.landsAt)
+				if (e.side === 'p1') this.heroDash(e.move, e.landsAt)
+				else
+					this.goblinWindup(
+						e.move,
+						e.landsAt,
+						e.blockTier !== null,
+						e.armored,
+					)
 				break
 			case 'hit':
 				if (e.attacker === 'p1')
-					this.onHeroHit(e.move as MoveId, e.damage, e.counter)
-				else this.onGoblinHit(e.damage)
+					this.onHeroHit(e.move, e.damage, e.counter)
+				else this.onGoblinHit(e.damage, e.counter)
 				break
 			case 'parried':
-				if (e.rewarded) this.onParry(e.perfect)
-				else this.onDeflect(e.chip)
+				if (e.defender === 'p1') this.awaitingParry = false
+				if (!e.rewarded) this.onDeflect(e.defender, e.chip)
+				else if (e.defender === 'p1') this.onParry(e.perfect)
+				else this.onHeroParried(e.perfect)
 				break
 			case 'interrupted':
 				if (e.side === 'p2') {
-					this.endTelegraph()
+					this.endSwing()
 					this.goblinRetreat()
 					this.floatText(
 						GOBLIN_HOME_X,
@@ -635,8 +683,32 @@ export default class Duel extends Phaser.Scene {
 						'INTERRUPTED!',
 						'#ffb300',
 					)
+				} else {
+					this.heroRetreat()
+					this.floatText(
+						PLAYER_HOME_X,
+						this.groundY() - 300,
+						'INTERRUPTED!',
+						'#ffb300',
+					)
 				}
 				break
+			case 'poison': {
+				const s = this.spriteOf(e.side)
+				this.floatText(s.x, s.y - 120, `-${e.damage}`, '#69f0ae', 30)
+				break
+			}
+			case 'drain': {
+				const s = this.spriteOf(e.from)
+				this.floatText(
+					s.x,
+					s.y - 90,
+					`-${e.amount} METER`,
+					'#b388ff',
+					22,
+				)
+				break
+			}
 			case 'roundOver':
 				this.onRoundOver(e.winner, e.reason)
 				break
@@ -647,19 +719,22 @@ export default class Duel extends Phaser.Scene {
 		this.renderCards()
 	}
 
-	private goblinTelegraph(move: string, landsAt: number): void {
-		const def = ENEMY_ATTACKS[move as keyof typeof ENEMY_ATTACKS]
-		this.telegraph = {
-			def,
-			startedAt: this.simNow,
-			landsAt,
-			striking: false,
-		}
-		this.cards
-			.get('block')
-			?.setCaption(
-				`PARRY ${def.label} · ${this.enemyDamage(def)}${def.armored ? ' · ARMORED' : def.rewardsParry ? '' : ' · DEFLECT ONLY'}`,
-			)
+	private spriteOf(side: Side): Phaser.GameObjects.Sprite {
+		return side === 'p1' ? this.player : this.goblin
+	}
+
+	/**
+	 * The goblin winds up. A parryable swing gets the full telegraph: a red
+	 * tint, a step back, a warning. A jab is just a swing, with no warning.
+	 */
+	private goblinWindup(
+		move: MoveId,
+		landsAt: number,
+		parryable: boolean,
+		armored: boolean,
+	): void {
+		this.swing = { move, armored, parryable, landsAt, striking: false }
+		if (!parryable) return
 		this.goblin.setTint(0xff8080)
 		// Anticipation: a small step back before the lunge.
 		this.tweens.add({
@@ -672,16 +747,36 @@ export default class Duel extends Phaser.Scene {
 		this.play('danger')
 	}
 
+	/** The block card for the goblin's incoming swing. */
+	private showBlock(landsAt: number, offeredAt: number): void {
+		// The match emits the attack just before its block offer, so the swing
+		// it describes is still the current one.
+		const s = this.swing
+		const move = s ? FIGHTERS.goblin.moves[s.move] : null
+		const caption = move
+			? `PARRY ${move.label} · ${move.damage}${s?.armored ? ' · ARMORED' : ''}`
+			: 'PARRY!'
+		this.cards.get('block')?.setCaption(caption)
+		this.blockOffer = { landsAt, offeredAt }
+		this.awaitingParry = false
+	}
+
+	/**
+	 * The hero's attack is in flight. It holds through most of the windup and
+	 * dashes in over the last stretch, so the approach reads as the strike.
+	 */
 	private heroDash(move: MoveId, landsAt: number): void {
-		const ms = Math.max(60, landsAt - this.simNow)
+		const left = Math.max(0, landsAt - this.simNow)
+		const dash = Math.min(HERO_DASH_MAX_MS, Math.max(60, left))
 		this.tweens.killTweensOf(this.player)
 		this.player.setScale(PLAYER_SCALE)
-		this.player.play('hero-dash')
 		this.tweens.add({
 			targets: this.player,
 			x: this.goblin.x - 200,
-			duration: ms,
+			duration: dash,
+			delay: Math.max(0, left - dash),
 			ease: 'Quad.easeIn',
+			onStart: () => this.player.play('hero-dash'),
 		})
 		if (move === 'special') {
 			this.juice.slowMo(0.35, 260)
@@ -690,6 +785,7 @@ export default class Duel extends Phaser.Scene {
 	}
 
 	private heroRetreat(): void {
+		this.tweens.killTweensOf(this.player)
 		this.tweens.add({
 			targets: this.player,
 			x: PLAYER_HOME_X,
@@ -707,12 +803,12 @@ export default class Duel extends Phaser.Scene {
 		this.slash(this.goblin.x - 30, this.goblin.y + 20, move)
 		this.goblin.play('gob-hit')
 		this.goblin.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
-			if (this.sim.fighters.p2.hp > 0 && !this.telegraph?.striking) {
+			if (this.sim.fighters.p2.hp > 0 && !this.swing?.striking) {
 				this.goblin.play('gob-idle')
 			}
 		})
 		// Knock back, then return home unless mid-strike.
-		if (!this.telegraph) {
+		if (!this.swing) {
 			this.tweens.add({
 				targets: this.goblin,
 				x: GOBLIN_HOME_X + (heavy ? 40 : 15),
@@ -740,8 +836,8 @@ export default class Duel extends Phaser.Scene {
 		this.heroRetreat()
 	}
 
-	private onGoblinHit(damage: number): void {
-		this.endTelegraph()
+	private onGoblinHit(damage: number, counter: boolean): void {
+		this.endSwing()
 		this.goblinRetreat()
 		this.goblin.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
 			if (this.sim.fighters.p2.hp > 0) this.goblin.play('gob-idle')
@@ -761,19 +857,24 @@ export default class Duel extends Phaser.Scene {
 		this.floatText(
 			this.player.x,
 			this.player.y - 150,
-			String(damage),
-			'#ff5252',
-			32,
+			counter ? `COUNTER ${damage}` : String(damage),
+			counter ? '#ffd600' : '#ff5252',
+			counter ? 40 : 32,
 		)
 	}
 
 	/**
-	 * A parry that pays nothing: the attack was a punish, or you have been
-	 * passive and leak chip damage through your guard.
+	 * A parry that pays nothing: the attack was a punish, or the defender has
+	 * been passive and leaks chip damage through its guard.
 	 */
-	private onDeflect(chip: number): void {
-		this.endTelegraph()
-		this.goblinRetreat()
+	private onDeflect(defender: Side, chip: number): void {
+		if (defender === 'p1') {
+			this.endSwing()
+			this.goblinRetreat()
+		} else {
+			// The goblin deflected your attack, so your dash is over.
+			this.heroRetreat()
+		}
 		this.juice.shake(3, 120)
 		this.play('parry', 1.3)
 		this.floatText(
@@ -785,8 +886,9 @@ export default class Duel extends Phaser.Scene {
 		)
 	}
 
+	/** You parried the goblin's swing: it is staggered and open to counters. */
 	private onParry(perfect: boolean): void {
-		this.endTelegraph()
+		this.endSwing()
 		this.goblin.play('gob-hit')
 		this.tweens.add({
 			targets: this.goblin,
@@ -832,14 +934,33 @@ export default class Duel extends Phaser.Scene {
 		})
 	}
 
-	private onRoundOver(
-		winner: 'p1' | 'p2' | null,
-		reason: 'ko' | 'time',
-	): void {
-		this.endTelegraph()
-		this.buffered = null
+	/** The goblin parried your attack: you are staggered and open to counters. */
+	private onHeroParried(perfect: boolean): void {
+		this.heroRetreat()
+		this.juice.hitstop(110)
+		this.juice.flash(0xff8a80, 120)
+		this.juice.shake(6, 200)
+		this.particles.burst(
+			this.player.x + 30,
+			this.player.y,
+			0xff8a80,
+			24,
+			300,
+		)
+		this.play('hurt')
+		this.floatText(
+			(this.player.x + this.goblin.x) / 2,
+			this.groundY() - 320,
+			perfect ? 'PERFECT PARRY!' : 'PARRIED!',
+			'#ff8a80',
+			44,
+		)
+	}
+
+	private onRoundOver(winner: Side | null, reason: 'ko' | 'time'): void {
+		this.endSwing()
+		this.hideBlock()
 		this.phase = 'between'
-		this.deck.resetAll()
 		if (winner === 'p2') this.player.play('hero-death')
 		if (winner === 'p1') this.goblin.play('gob-death')
 		this.juice.slowMo(0.3, 700)
@@ -985,6 +1106,7 @@ export default class Duel extends Phaser.Scene {
 		this.pauseText.setVisible(this.paused)
 		this.pauseShade.setVisible(this.paused)
 		this.renderCards()
+		this.renderOpponentTyping()
 		if (this.paused) {
 			this.tweens.pauseAll()
 			this.anims.pauseAll()
@@ -1024,6 +1146,8 @@ export default class Duel extends Phaser.Scene {
 		this.time.paused = false
 		for (const c of this.cards.values()) c.destroy()
 		this.cards.clear()
+		this.oppTyping?.destroy()
+		this.oppTyping = undefined
 		this.hud.destroy()
 		this.input.keyboard?.removeAllListeners()
 	}

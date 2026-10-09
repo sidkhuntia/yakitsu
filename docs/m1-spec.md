@@ -203,6 +203,8 @@ export class DuelMatch implements BotHost {
 	advance(now: number): void
 	nextDueAt(): number
 	drain(): MatchEvent[]
+	/** Event-stepped driver shared by the scene and the balance harness. */
+	step(now: number, bots: Partial<Record<Side, TypistBot>>): void
 	// + BotHost methods
 }
 ```
@@ -218,6 +220,9 @@ export class DuelMatch implements BotHost {
   emitted) on that attack's `hit`, `parried`, `interrupted`, or `roundOver`.
 - `roundOver` → reset both decks and buffers.
 - Same granularity invariance as the sim, including bot-driven matches.
+- Bots only observe the match when they wake, so anything driving bots must
+  go through `step()`, which advances to each bot wake time in order. The
+  scene calls `step(simNow, { p2: bot })` once per frame.
 
 ## Balance harness — `balance.ts`, `scripts/balance.ts`
 

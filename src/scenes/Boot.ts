@@ -91,6 +91,26 @@ export default class Boot extends Phaser.Scene {
 			frameHeight: 180,
 		})
 
+		// Duel mode: hero reactions, and the goblin's stance and swing.
+		this.load.spritesheet('avatar_hit', 'assets/character/Take Hit.png', {
+			frameWidth: 180,
+			frameHeight: 180,
+		})
+		this.load.spritesheet('avatar_death', 'assets/character/Death.png', {
+			frameWidth: 180,
+			frameHeight: 180,
+		})
+		for (const [key, file] of [
+			['idle', 'Idle'],
+			['attack', 'Attack'],
+		] as const) {
+			this.load.spritesheet(
+				`monster_Goblin_${key}`,
+				`assets/monsters/Goblin/${file}.png`,
+				{ frameWidth: 150, frameHeight: 150 },
+			)
+		}
+
 		for (const type of ['Skeleton', 'Flying eye', 'Mushroom', 'Goblin']) {
 			const dir = `assets/monsters/${type}`
 			this.load.spritesheet(`monster_${type}_run`, `${dir}/Run.png`, {

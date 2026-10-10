@@ -34,7 +34,24 @@ export interface SaveData {
 		/** Combo milestones already celebrated, so banners fire once each. */
 		seenMilestones: number[]
 	}
+	duel: DuelProgress
 }
+
+export interface DuelProgress {
+	/** Highest duel level the player may pick. Level 1 is always open. */
+	unlockedLevel: number
+	/** Fastest winning match per level, in ms, keyed by level number. */
+	bestMs: Record<string, number>
+	wins: number
+	losses: number
+}
+
+const emptyDuel = (): DuelProgress => ({
+	unlockedLevel: 1,
+	bestMs: {},
+	wins: 0,
+	losses: 0,
+})
 
 export interface Settings {
 	muted: boolean
@@ -98,6 +115,7 @@ const DEFAULT_SAVE_DATA: SaveData = {
 		assistLevel: 1,
 	},
 	unlocks: { seenMilestones: [] },
+	duel: emptyDuel(),
 }
 
 /**
@@ -112,6 +130,7 @@ export function loadData(): SaveData {
 		records: { ...DEFAULT_SAVE_DATA.records },
 		settings: { ...DEFAULT_SAVE_DATA.settings },
 		unlocks: { seenMilestones: [] },
+		duel: emptyDuel(),
 	}
 
 	let raw: string | null = null
@@ -145,10 +164,62 @@ export function loadData(): SaveData {
 			lastScores: Array.isArray(parsed.lastScores)
 				? parsed.lastScores.slice(0, 10)
 				: [],
+			duel: repairDuel(parsed.duel),
 		}
 	} catch {
 		return fallback
 	}
+}
+
+function repairDuel(raw: Partial<DuelProgress> | undefined): DuelProgress {
+	const d = emptyDuel()
+	if (!raw || typeof raw !== 'object') return d
+	const num = (v: unknown, fallback: number): number =>
+		typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : fallback
+	d.unlockedLevel = Math.max(1, Math.floor(num(raw.unlockedLevel, 1)))
+	d.wins = num(raw.wins, 0)
+	d.losses = num(raw.losses, 0)
+	if (raw.bestMs && typeof raw.bestMs === 'object') {
+		for (const [k, v] of Object.entries(raw.bestMs)) {
+			if (typeof v === 'number' && v > 0) d.bestMs[k] = v
+		}
+	}
+	return d
+}
+
+/**
+ * Record a finished duel.
+ *
+ * @param maxLevel  the ladder's top, so a win there cannot unlock past it
+ * @param assisted  played with the Assist setting below 1
+ * @returns true when this win unlocked a new level
+ */
+export function recordDuel(
+	level: number,
+	won: boolean,
+	durationMs: number,
+	maxLevel: number,
+	assisted = false,
+): boolean {
+	const data = loadData()
+	const d = data.duel
+	if (!won) {
+		d.losses++
+		persist(data)
+		return false
+	}
+	d.wins++
+	const key = String(level)
+	// Assist lengthens every telegraph, so an assisted win still unlocks the
+	// next level (it is an accessibility setting) but never sets a best time.
+	if (!assisted && (!d.bestMs[key] || durationMs < d.bestMs[key])) {
+		d.bestMs[key] = durationMs
+	}
+	const next = Math.min(maxLevel, level + 1)
+	const unlocked = next > d.unlockedLevel
+	if (unlocked) d.unlockedLevel = next
+	persist(data)
+	return unlocked
 }
 
 function persist(data: SaveData): void {
@@ -223,6 +294,7 @@ export function clearHighscores(): void {
 		'i-am-god': emptyRecord(),
 	}
 	data.unlocks = { seenMilestones: [] }
+	data.duel = emptyDuel()
 	persist(data)
 }
 

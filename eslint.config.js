@@ -8,5 +8,10 @@ export default defineConfig([
 		languageOptions: { globals: globals.browser },
 	},
 	tseslint.configs.recommended,
-	globalIgnores(['dist/**', 'node_modules/**', 'public/data/**']),
+	globalIgnores([
+		'dist/**',
+		'node_modules/**',
+		'public/data/**',
+		'.claude/**',
+	]),
 ])

@@ -1,6 +1,6 @@
 import Phaser from 'phaser'
 import { loadAudio } from '../systems/sfx'
-import { displayFont } from '../systems/font'
+import { displayFont, fontsReady } from '../systems/font'
 import { loadBackdrop } from '../systems/backdrop'
 
 /**
@@ -12,6 +12,7 @@ import { loadBackdrop } from '../systems/backdrop'
 export default class Boot extends Phaser.Scene {
 	private barFill?: Phaser.GameObjects.Rectangle
 	private label?: Phaser.GameObjects.Text
+	private progress = 0
 	private readonly barWidth = 420
 
 	constructor() {
@@ -33,23 +34,33 @@ export default class Boot extends Phaser.Scene {
 			.rectangle(barX - this.barWidth / 2, barY, 0, 14, 0x00e676)
 			.setOrigin(0, 0.5)
 
-		this.add
-			.text(barX, barY - 60, 'YAKITSU', {
-				fontFamily: displayFont(),
-				fontSize: '52px',
-				color: '#ffb347',
-			})
-			.setOrigin(0.5)
+		// Canvas text drawn before the pixel face is loaded keeps the fallback
+		// face's metrics for its whole life, so these wait for the font.
+		void fontsReady().then(() => {
+			this.add
+				.text(barX, barY - 60, 'YAKITSU', {
+					fontFamily: displayFont(),
+					fontSize: '52px',
+					color: '#ffb347',
+				})
+				.setOrigin(0.5)
 
-		this.label = this.add
-			.text(barX, barY + 40, 'LOADING 0%', {
-				fontFamily: displayFont(),
-				fontSize: '16px',
-				color: '#7f8fa6',
-			})
-			.setOrigin(0.5)
+			this.label = this.add
+				.text(
+					barX,
+					barY + 40,
+					`LOADING ${Math.round(this.progress * 100)}%`,
+					{
+						fontFamily: displayFont(),
+						fontSize: '16px',
+						color: '#7f8fa6',
+					},
+				)
+				.setOrigin(0.5)
+		})
 
 		this.load.on('progress', (value: number) => {
+			this.progress = value
 			this.barFill?.setSize(this.barWidth * value, 14)
 			this.label?.setText(`LOADING ${Math.round(value * 100)}%`)
 		})
@@ -126,8 +137,11 @@ export default class Boot extends Phaser.Scene {
 	}
 
 	create(): void {
-		// Everything is in the cache now; unblock any queued start request.
-		this.game.events.emit('yk-assets-ready')
+		// Everything is in the cache now, and so are the fonts. Unblock any
+		// queued start request only once Play or Duel can draw with them.
+		void fontsReady().then(() => {
+			this.game.events.emit('yk-assets-ready')
+		})
 
 		this.cameras.main.fadeOut(260, 10, 15, 22)
 		this.cameras.main.once(

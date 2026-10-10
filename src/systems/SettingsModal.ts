@@ -1,5 +1,6 @@
 import Phaser from 'phaser'
 import { SFX } from './sfx'
+import { displayFont } from './font'
 import {
 	clearHighscores,
 	loadData,
@@ -139,7 +140,7 @@ export class SettingsModal extends Phaser.GameObjects.Container {
 
 		const title = scene.add
 			.text(cx, top + 40, 'PAUSED', {
-				fontFamily: 'Press Start 2P',
+				fontFamily: displayFont(),
 				fontSize: '30px',
 				color: '#ffffff',
 			})
@@ -151,7 +152,7 @@ export class SettingsModal extends Phaser.GameObjects.Container {
 			const y = startY + i * ROW_H
 			const btn = scene.add
 				.text(cx, y, row.label(), {
-					fontFamily: 'Press Start 2P',
+					fontFamily: displayFont(),
 					fontSize: '18px',
 					color: '#e6f1ff',
 					backgroundColor: '#141d2b',
@@ -179,7 +180,7 @@ export class SettingsModal extends Phaser.GameObjects.Container {
 				rowsBottom + 30,
 				'Lower Assist gives you more time per word',
 				{
-					fontFamily: 'Press Start 2P',
+					fontFamily: displayFont(),
 					fontSize: '13px',
 					color: '#7f8fa6',
 				},
@@ -194,7 +195,7 @@ export class SettingsModal extends Phaser.GameObjects.Container {
 		): Phaser.GameObjects.Text => {
 			const t = scene.add
 				.text(cx, y, label, {
-					fontFamily: 'Press Start 2P',
+					fontFamily: displayFont(),
 					fontSize: '19px',
 					color: '#08131f',
 					backgroundColor: `#${color.toString(16).padStart(6, '0')}`,
@@ -229,7 +230,7 @@ export class SettingsModal extends Phaser.GameObjects.Container {
 		// Clear save, tucked into the corner so it can't be hit by accident.
 		const clear = scene.add
 			.text(cx - PANEL_W / 2 + 18, top + PANEL_H - 16, 'reset data', {
-				fontFamily: 'Press Start 2P',
+				fontFamily: displayFont(),
 				fontSize: '13px',
 				color: '#ff5252',
 			})

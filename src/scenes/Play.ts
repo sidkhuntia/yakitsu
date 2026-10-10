@@ -9,7 +9,11 @@ import { Monster, MONSTER_TYPES, type MonsterType } from '../systems/Monster'
 import { bodyFont, displayFont } from '../systems/font'
 import { SettingsModal } from '../systems/SettingsModal'
 import { MUSIC, SFX } from '../systems/sfx'
-import { BACKDROP_LAYERS, BACKDROP_SCALE } from '../systems/backdrop'
+import {
+	addBackdropShade,
+	BACKDROP_LAYERS,
+	BACKDROP_SCALE,
+} from '../systems/backdrop'
 import { GameOverModal, type GameOverSummary } from '../systems/GameOverModal'
 import {
 	claimMilestone,
@@ -220,7 +224,7 @@ export default class Play extends Phaser.Scene {
 		this.phase = 'countdown'
 		const label = this.add
 			.text(this.scale.width / 2, this.scale.height * 0.25, '', {
-				fontFamily: 'Press Start 2P',
+				fontFamily: displayFont(),
 				fontSize: '72px',
 				color: '#ffffff',
 			})
@@ -511,7 +515,7 @@ export default class Play extends Phaser.Scene {
 	private showBanner(text: string, color: number): void {
 		const b = this.add
 			.text(this.scale.width / 2, this.scale.height - 40, text, {
-				fontFamily: 'Press Start 2P',
+				fontFamily: displayFont(),
 				fontSize: '34px',
 				color: `#${color.toString(16).padStart(6, '0')}`,
 				stroke: '#000000',
@@ -543,7 +547,7 @@ export default class Play extends Phaser.Scene {
 	): void {
 		const t = this.add
 			.text(x, y, `+${amount}${perfect ? '  PERFECT' : ''}`, {
-				fontFamily: 'Press Start 2P',
+				fontFamily: displayFont(),
 				fontSize: perfect ? '32px' : '24px',
 				color: perfect ? '#00e676' : '#ffd166',
 				stroke: '#000000',
@@ -959,6 +963,8 @@ export default class Play extends Phaser.Scene {
 				scroll,
 			})
 		})
+		// The HUD sits over the bright sky, so darken it the same way as the duel.
+		addBackdropShade(this)
 	}
 
 	private buildAvatar(): void {

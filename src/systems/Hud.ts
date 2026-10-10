@@ -1,5 +1,6 @@
 import Phaser from 'phaser'
 import { TUNING, type DifficultyProfile } from './tuning'
+import { displayFont } from './font'
 
 /**
  * A lightweight particle burst. Uses a procedurally generated square texture so
@@ -72,7 +73,7 @@ export class Hud {
 		private readonly difficulty: DifficultyProfile,
 	) {
 		const font = (size: number, color: string) => ({
-			fontFamily: 'Press Start 2P',
+			fontFamily: displayFont(),
 			fontSize: `${size}px`,
 			color,
 		})

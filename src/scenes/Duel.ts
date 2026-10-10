@@ -24,7 +24,12 @@ import { CardView } from '../systems/duel/CardView'
 import { DuelHud } from '../systems/duel/DuelHud'
 import { DUEL, type MoveId, type Side } from '../systems/duel/duelTuning'
 import { MUSIC, SFX } from '../systems/sfx'
-import { BACKDROP_LAYERS, BACKDROP_SCALE, FLOOR_Y } from '../systems/backdrop'
+import {
+	addBackdropShade,
+	BACKDROP_LAYERS,
+	BACKDROP_SCALE,
+	FLOOR_Y,
+} from '../systems/backdrop'
 
 type Phase = 'intro' | 'fight' | 'between' | 'over'
 
@@ -50,10 +55,10 @@ const PLAYER_FEET_PX = 24
 const GOBLIN_FEET_PX = 26
 
 const CARD_STYLE: Record<Slot, { accent: number; fontSize: number }> = {
-	jab: { accent: 0x64ffda, fontSize: 26 },
-	heavy: { accent: 0xffb300, fontSize: 26 },
-	special: { accent: 0xffd600, fontSize: 26 },
-	block: { accent: 0xff5252, fontSize: 36 },
+	jab: { accent: 0x64ffda, fontSize: 28 },
+	heavy: { accent: 0xffb300, fontSize: 28 },
+	special: { accent: 0xffd600, fontSize: 28 },
+	block: { accent: 0xff5252, fontSize: 40 },
 }
 
 /**
@@ -279,12 +284,9 @@ export default class Duel extends Phaser.Scene {
 					.setTileScale(BACKDROP_SCALE)
 					.setDepth(-20 + i)
 		})
-		// Darken the backdrop so the fighters and cards own the frame. Sits
-		// above every layer (-20 to -13) and below the fighters (10).
-		this.add
-			.rectangle(0, 0, width, height, 0x000000, 0.35)
-			.setOrigin(0)
-			.setDepth(-12)
+		// Darken the sky and mountains so the cards and HUD own the frame. The
+		// fighters, ground and cards all sit above the shade.
+		addBackdropShade(this)
 	}
 
 	private buildFighters(): void {

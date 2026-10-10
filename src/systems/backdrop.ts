@@ -40,3 +40,48 @@ export function loadBackdrop(load: Phaser.Loader.LoaderPlugin): void {
 		load.image(key, `assets/background/${file}`)
 	}
 }
+
+/**
+ * Depth of the darkening shade. It sits above every backdrop layer except the
+ * rocks (the ground, -13), so the sky, clouds, mountains and trees dim while
+ * the ground, fighters, runner and cards stay at full brightness.
+ */
+export const SHADE_DEPTH = -13.5
+/** Black over the whole backdrop. Dark enough for 12px captions on clouds. */
+export const SHADE_ALPHA = 0.5
+/** Height of the extra-dark band behind the top card row and the HUD. */
+export const TOP_BAND_HEIGHT = 260
+const TOP_BAND_ALPHA = 0.6
+const TOP_BAND_KEY = '__backdrop_top_band'
+
+/**
+ * Darken the sky and mountain side of the backdrop, plus a gradient band across
+ * the top. Call after `loadBackdrop` layers have been added.
+ */
+export function addBackdropShade(scene: Phaser.Scene): void {
+	const { width, height } = scene.scale
+	scene.add
+		.rectangle(0, 0, width, height, 0x000000, SHADE_ALPHA)
+		.setOrigin(0)
+		.setDepth(SHADE_DEPTH)
+
+	if (!scene.textures.exists(TOP_BAND_KEY)) {
+		const canvas = document.createElement('canvas')
+		canvas.width = 4
+		canvas.height = TOP_BAND_HEIGHT
+		const ctx = canvas.getContext('2d')
+		if (ctx) {
+			const g = ctx.createLinearGradient(0, 0, 0, TOP_BAND_HEIGHT)
+			g.addColorStop(0, `rgba(0,0,0,${TOP_BAND_ALPHA})`)
+			g.addColorStop(1, 'rgba(0,0,0,0)')
+			ctx.fillStyle = g
+			ctx.fillRect(0, 0, canvas.width, canvas.height)
+		}
+		scene.textures.addCanvas(TOP_BAND_KEY, canvas)
+	}
+	scene.add
+		.image(0, 0, TOP_BAND_KEY)
+		.setOrigin(0)
+		.setDisplaySize(width, TOP_BAND_HEIGHT)
+		.setDepth(SHADE_DEPTH + 0.1)
+}

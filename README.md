@@ -1,4 +1,4 @@
-# Yakitsku
+# Yakitsu
 
 A pixel-art endless typing runner. Type the word to strike the monster before it
 reaches your runner. Built with Phaser 3, TypeScript and Vite.

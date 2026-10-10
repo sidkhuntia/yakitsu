@@ -34,7 +34,7 @@ export default class Boot extends Phaser.Scene {
 			.setOrigin(0, 0.5)
 
 		this.add
-			.text(barX, barY - 60, 'YAKITSKU', {
+			.text(barX, barY - 60, 'YAKITSU', {
 				fontFamily: displayFont(),
 				fontSize: '52px',
 				color: '#ffb347',

@@ -62,8 +62,8 @@ export default class Boot extends Phaser.Scene {
 		loadAudio(this.load)
 
 		// --- power-ups -------------------------------------------------------
-		this.load.image('ice', 'assets/ice.png')
-		this.load.image('bomb', 'assets/bomb.png')
+		this.load.svg('ice', 'assets/ice.svg', { width: 32, height: 32 })
+		this.load.svg('bomb', 'assets/bomb.svg', { width: 32, height: 32 })
 
 		// --- word list -------------------------------------------------------
 		this.load.script('words', 'data/words/words.js')

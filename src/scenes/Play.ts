@@ -113,8 +113,6 @@ export default class Play extends Phaser.Scene {
 	// ------------------------------------------------------------------ assets
 
 	preload(): void {
-		this.load.image('ice', 'assets/ice.png')
-		this.load.image('bomb', 'assets/bomb.png')
 		this.load.script('words', 'data/words/words.js')
 
 		// The backdrop layers are queued by Boot (see systems/backdrop.ts).

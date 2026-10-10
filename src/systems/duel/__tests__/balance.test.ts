@@ -5,24 +5,44 @@ import {
 	winRateMatrix,
 	type PairRow,
 } from '../balance'
-import { FIGHTERS, FIGHTER_IDS, parryBudgetOk } from '../fighters'
-import { botProfile, type BotStyle } from '../typistBot'
+import {
+	FIGHTERS,
+	FIGHTER_IDS,
+	parryBudgetOk,
+	type FighterId,
+} from '../fighters'
+import { botProfile, type BotProfile, type BotStyle } from '../typistBot'
 import { WORD_TIERS } from '../../tuning'
 import { loadWordPicker } from './wordsFixture'
 
 /** Matches per pairing for the release gate. Deterministic: fixed seeds. */
 const GATE_N = 400
-/** Matches per mirror for the dominance check. */
-const MIRROR_N = 200
+/** Matches per mirror for the dominance check. Deterministic: fixed seeds. */
+const MIRROR_N = 80
 /** Matches per sanity comparison. */
 const SANITY_N = 100
+/** Speeds the dominance check covers. */
+const DOMINANCE_WPMS = [40, 70, 100]
+/** A style may not win more than this share of a mirror against mixed. */
+const DOMINANCE_MAX = 0.55
+
+/**
+ * Every bot is a rational defender: it parries whenever it can. Without this
+ * a bot's own parry appetite, not the rules or the fighters, decides results.
+ */
+const RATIONAL: Partial<BotProfile> = { parryChance: 1 }
 
 const pick = loadWordPicker()
 
 let gateCache: PairRow[] | null = null
 /** The 70 WPM mixed-vs-mixed matrix, computed once for the gate and sanity. */
 function gate70(): PairRow[] {
-	gateCache ??= winRateMatrix({ wpm: 70, n: GATE_N, pick })
+	gateCache ??= winRateMatrix({
+		wpm: 70,
+		n: GATE_N,
+		pick,
+		profileOverrides: RATIONAL,
+	})
 	return gateCache
 }
 
@@ -40,11 +60,31 @@ describe('balance: release gate', () => {
 })
 
 describe('balance: dominance', () => {
-	it('for every fighter, jabber vs mixed mirror at 70 WPM does not exceed 60%', () => {
-		const over = FIGHTER_IDS.map((f) => ({
-			f,
-			rate: mirrorRate(f, 'jabber', 'mixed', 70, MIRROR_N, pick).rate,
-		})).filter((r) => r.rate > 0.6)
+	it('for every fighter, at 40, 70 and 100 WPM, neither jabber nor heavy beats mixed in a mirror by more than 55%', () => {
+		const over: {
+			f: FighterId
+			wpm: number
+			style: BotStyle
+			rate: number
+		}[] = []
+		for (const wpm of DOMINANCE_WPMS) {
+			for (const f of FIGHTER_IDS) {
+				for (const style of ['jabber', 'heavy'] as const) {
+					const rate = mirrorRate(
+						f,
+						style,
+						'mixed',
+						wpm,
+						MIRROR_N,
+						pick,
+						{
+							profileOverrides: RATIONAL,
+						},
+					).rate
+					if (rate > DOMINANCE_MAX) over.push({ f, wpm, style, rate })
+				}
+			}
+		}
 		expect(over).toEqual([])
 	})
 })
@@ -70,8 +110,8 @@ describe('balance: fairness', () => {
 
 describe('balance: sanity', () => {
 	it('a 100 WPM mixed hero beats a 40 WPM mixed hero at least 90% of the time', () => {
-		const fast = botProfile(100, 'mixed')
-		const slow = botProfile(40, 'mixed')
+		const fast = botProfile(100, 'mixed', RATIONAL)
+		const slow = botProfile(40, 'mixed', RATIONAL)
 		let wins = 0
 		for (let i = 0; i < SANITY_N; i++) {
 			// Swap sides on odd seeds so side bias cannot decide the result.
@@ -107,7 +147,9 @@ describe('balance: sanity', () => {
 	it('the style mirror at 70 WPM is a valid rate (smoke check on styles)', () => {
 		const styles: BotStyle[] = ['jabber', 'heavy', 'turtle']
 		for (const s of styles) {
-			const r = mirrorRate('hero', s, 'mixed', 70, 20, pick)
+			const r = mirrorRate('hero', s, 'mixed', 70, 20, pick, {
+				profileOverrides: RATIONAL,
+			})
 			expect(r.rate).toBeGreaterThanOrEqual(0)
 			expect(r.rate).toBeLessThanOrEqual(1)
 		}

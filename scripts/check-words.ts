@@ -1,7 +1,7 @@
 /**
  * Validates a Yakitsu word list (THESAURUS format) before it ships.
  *
- *   npx tsx scripts/check-words.ts public/data/words/words.next.js
+ *   npx tsx scripts/check-words.ts public/data/words/words.js
  *
  * Exits 1 and lists every problem if the file fails any rule. The blocklist
  * below is never shown in-game; it only gates what gets shipped.

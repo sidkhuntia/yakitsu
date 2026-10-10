@@ -55,7 +55,8 @@ describe('DuelSim: core rules', () => {
 	})
 
 	it('a parry cancels the attack, staggers the attacker and pays meter', () => {
-		const s = sim()
+		// Full cancel: pinned, since the default blockDamageShare leaks damage.
+		const s = sim(HERO, HERO, { rules: { blockDamageShare: 0 } })
 		s.attack('p2', 'heavy', false, 0) // windup 1100
 		expect(s.parry('p1', false, 500)).toBe(true)
 		s.advance(2000)
@@ -214,7 +215,7 @@ describe('DuelSim: core rules', () => {
 	})
 
 	it('a passive fighter parry only deflects and leaks chip', () => {
-		const s = sim()
+		const s = sim(HERO, HERO, { rules: { blockDamageShare: 0 } })
 		// p1 has thrown nothing for over passiveMs, so its parry is passive.
 		s.attack('p2', 'heavy', false, 10_500) // lands 11600
 		expect(s.parry('p1', false, 11_000)).toBe(true)
@@ -292,7 +293,7 @@ describe('DuelSim: windups and timing', () => {
 describe('DuelSim: signatures', () => {
 	it('combo bonus grows with the chain and caps', () => {
 		// Goblin's combo: +2 per link, max +6. Landings every 300ms stay in chain.
-		const s = sim(FIGHTERS.goblin, HERO)
+		const s = sim(FIGHTERS.goblin, HERO, { rules: { staleFactor: 1 } })
 		for (let i = 0; i < 6; i++) s.attack('p1', 'jab', false, i * 300)
 		s.advance(2000)
 		expect(hitDamages(s.drain())).toEqual([4, 6, 8, 10, 10, 10])
@@ -420,13 +421,17 @@ describe('DuelSim: signatures', () => {
 	})
 
 	it('resolve scales damage only below its HP threshold', () => {
-		const full = sim()
+		// Repeated jabs: pinned so staling does not change the damage.
+		const full = sim(HERO, HERO, { rules: { staleFactor: 1 } })
 		full.attack('p1', 'jab', false, 0)
 		full.advance(300)
 		expect(hitDamages(full.drain())).toEqual([4])
 
 		// Hero at 2 of 10 HP is below the 30% threshold: 4 x 1.2 = 4.8 -> 5.
-		const low = sim(HERO, HERO, { maxHp: { p1: 10 } })
+		const low = sim(HERO, HERO, {
+			maxHp: { p1: 10 },
+			rules: { staleFactor: 1 },
+		})
 		low.attack('p2', 'jab', false, 0) // p1 6
 		low.attack('p2', 'jab', false, 600) // p1 2
 		low.attack('p1', 'jab', false, 1200)
@@ -618,8 +623,8 @@ describe('DuelSim: blockDamageShare', () => {
 		)
 	})
 
-	it('0 (default) leaves a successful parry at no damage', () => {
-		const s = sim()
+	it('0 leaves a successful parry at no damage', () => {
+		const s = sim(HERO, HERO, { rules: { blockDamageShare: 0 } })
 		s.attack('p2', 'heavy', false, 0)
 		s.parry('p1', false, 500)
 		expect(s.fighters.p1.hp).toBe(HERO.maxHp)
@@ -657,9 +662,21 @@ describe('DuelSim: move staling', () => {
 	const stalesOf = (events: DuelEvent[]) =>
 		attacksStarted(events).map((e) => Number(e.stale.toFixed(3)))
 
-	it('is off by default: every repeat deals full damage', () => {
-		expect(DUEL.staleFactor).toBe(1)
+	it('defaults to 0.8: the second repeat deals 0.8x, the third 0.64x', () => {
+		expect(DUEL.staleFactor).toBe(0.8)
 		const s = sim()
+		s.attack('p1', 'jab', false, 0)
+		s.attack('p1', 'jab', false, 300)
+		s.attack('p1', 'jab', false, 600)
+		s.advance(900)
+		const events = s.drain()
+		expect(stalesOf(events)).toEqual([1, 0.8, 0.64])
+		// round(4 * 0.8) = 3, round(4 * 0.64) = 3
+		expect(hitDamages(events)).toEqual([4, 3, 3])
+	})
+
+	it('staleFactor 1 turns staling off: every repeat deals full damage', () => {
+		const s = sim(HERO, HERO, { rules: { staleFactor: 1 } })
 		s.attack('p1', 'jab', false, 0)
 		s.attack('p1', 'jab', false, 300)
 		s.attack('p1', 'jab', false, 600)

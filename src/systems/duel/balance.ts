@@ -59,6 +59,15 @@ export interface RuleOverrides {
 	defs?: Partial<Record<FighterId, FighterDef>>
 }
 
+/** Batch tuning: rules and fighter defs, plus bot profile overrides. */
+export interface BatchOptions extends RuleOverrides {
+	/**
+	 * Merged into both bots' profiles, after the WPM curve and the style. For
+	 * example `{ parryChance: 1 }` pins every bot to a rational defender.
+	 */
+	profileOverrides?: Partial<BotProfile>
+}
+
 export interface SimulateOptions {
 	/** Fighter on the p1 side. */
 	a: FighterId
@@ -90,6 +99,11 @@ export interface MatchResult {
 	endedBy: 'ko' | 'time' | 'cap'
 	/** True when the MAX_ROUNDS cap decided the winner. */
 	capped: boolean
+	/**
+	 * Mean over rounds of (p1 HP fraction - p2 HP fraction), read at each
+	 * roundOver. Positive favours p1. 0 when no round was played.
+	 */
+	margin: number
 	stats: Record<Side, SideStats>
 }
 
@@ -152,6 +166,7 @@ export function simulateMatch(opts: SimulateOptions): MatchResult {
 	let winner: Side | null = null
 	let capped = false
 	let endAt = 0
+	let marginSum = 0
 	/** Set after a roundOver, cleared when the next round starts. */
 	let restartAt: number | null = null
 
@@ -195,6 +210,8 @@ export function simulateMatch(opts: SimulateOptions): MatchResult {
 				endedBy = e.reason
 				if (e.reason === 'ko') koRounds++
 				else timeRounds++
+				// Read now, before the next round's startRound resets HP.
+				marginSum += hpFraction(match, 'p1') - hpFraction(match, 'p2')
 			} else if (e.t === 'matchOver') {
 				winner = e.winner
 				endAt = now
@@ -225,8 +242,14 @@ export function simulateMatch(opts: SimulateOptions): MatchResult {
 		timeRounds,
 		endedBy,
 		capped,
+		margin: rounds === 0 ? 0 : marginSum / rounds,
 		stats,
 	}
+}
+
+function hpFraction(match: DuelMatch, side: Side): number {
+	const f = match.sim.fighters[side]
+	return f.hp / f.maxHp
 }
 
 function tally(e: MatchEvent, stats: Record<Side, SideStats>): void {
@@ -268,13 +291,20 @@ export interface PairRow {
 	koShare: number
 	/** Matches stopped by the MAX_ROUNDS cap. */
 	capped: number
+	/**
+	 * Mean round-end HP margin from `a`'s perspective: over every round, the
+	 * fraction of max HP `a`'s fighter has left minus `b`'s, measured at each
+	 * roundOver and averaged. Positive favours `a`. A smooth surrogate for
+	 * `rate`, since a win rate hides how close the matches were.
+	 */
+	margin: number
 	/** Move outcomes of fighter `a`'s attacks, summed over the n matches. */
 	movesA: Record<MoveId, MoveStats>
 	/** Move outcomes of fighter `b`'s attacks, summed over the n matches. */
 	movesB: Record<MoveId, MoveStats>
 }
 
-export interface MatrixOptions extends RuleOverrides {
+export interface MatrixOptions extends BatchOptions {
 	wpm: number
 	/** Style of the fighter listed first in each pair. Default 'mixed'. */
 	styleA?: BotStyle
@@ -307,6 +337,7 @@ function playPair(
 	let rounds = 0
 	let koRounds = 0
 	let capped = 0
+	let marginSum = 0
 	const movesA = emptySide().moves
 	const movesB = emptySide().moves
 	for (let i = 0; i < n; i++) {
@@ -336,8 +367,10 @@ function playPair(
 		rounds += r.rounds
 		koRounds += r.koRounds
 		if (r.capped) capped++
-		// Seat p1 is fighter a unless the sides were swapped.
+		// Seat p1 is fighter a unless the sides were swapped. `margin` is from
+		// p1's seat, so it flips when a sits in p2.
 		const seatA: Side = swap ? 'p2' : 'p1'
+		marginSum += swap ? -r.margin * r.rounds : r.margin * r.rounds
 		accumulate(movesA, r.stats[seatA].moves)
 		accumulate(movesB, r.stats[other(seatA)].moves)
 	}
@@ -350,6 +383,7 @@ function playPair(
 		avgDurationMs: n === 0 ? 0 : duration / n,
 		koShare: rounds === 0 ? 0 : koRounds / rounds,
 		capped,
+		margin: rounds === 0 ? 0 : marginSum / rounds,
 		movesA,
 		movesB,
 	}
@@ -373,8 +407,16 @@ function accumulate(
  */
 export function winRateMatrix(opts: MatrixOptions): PairRow[] {
 	const ids = opts.fighters ?? FIGHTER_IDS
-	const pa = botProfile(opts.wpm, opts.styleA ?? 'mixed')
-	const pb = botProfile(opts.wpm, opts.styleB ?? 'mixed')
+	const pa = botProfile(
+		opts.wpm,
+		opts.styleA ?? 'mixed',
+		opts.profileOverrides,
+	)
+	const pb = botProfile(
+		opts.wpm,
+		opts.styleB ?? 'mixed',
+		opts.profileOverrides,
+	)
 	const rows: PairRow[] = []
 	for (let i = 0; i < ids.length; i++) {
 		for (let j = i + 1; j < ids.length; j++) {
@@ -408,14 +450,14 @@ export function mirrorRate(
 	wpm: number,
 	n: number,
 	pick: WordPicker,
-	extra: RuleOverrides = {},
+	extra: BatchOptions = {},
 ): PairRow {
 	const fi = FIGHTER_IDS.indexOf(fighter)
 	return playPair(
 		fighter,
 		fighter,
-		botProfile(wpm, styleA),
-		botProfile(wpm, styleB),
+		botProfile(wpm, styleA, extra.profileOverrides),
+		botProfile(wpm, styleB, extra.profileOverrides),
 		n,
 		(k) => mixSeed(fi, 0x5171, k),
 		pick,

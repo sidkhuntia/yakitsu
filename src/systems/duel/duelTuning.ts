@@ -27,15 +27,25 @@ export const DUEL = {
 	/** Pause after a KO before the next round starts. */
 	roundOverMs: 2200,
 
-	/** How long a parried fighter stays open. Hits during it are counters. */
-	parryStaggerMs: 1300,
+	/**
+	 * How long a parried fighter stays open. Hits during it are counters.
+	 * 600 ms (was 1300). Chosen by the sweeps (`scripts/out/sweep-v3.json`),
+	 * together with the partial block and staling below. A full-cancel parry
+	 * made parrying dominant at high WPM.
+	 */
+	parryStaggerMs: 600,
+	/** Damage multiplier on hits that land during a parry stagger. */
 	counterMultiplier: 1.5,
 	/** A word finished without ever mistyping. */
 	perfectMultiplier: 1.2,
 
 	meterOnHit: 8,
 	meterOnPerfect: 6,
-	meterOnParry: 25,
+	/**
+	 * Meter for a successful parry (was 25). Chosen by the sweeps with the
+	 * other parry rules (`scripts/out/sweep-v3.json`).
+	 */
+	meterOnParry: 12,
 	/** Getting hit builds a little meter, so a losing player has a way back. */
 	meterOnTakeHit: 5,
 	meterOnMistake: -3,
@@ -52,26 +62,31 @@ export const DUEL = {
 	/** Share of a parried attack's damage a passive fighter still takes. */
 	passiveChip: 0.4,
 	/**
-	 * Rule variant. 0 (default): switching from a clean attack word to the
-	 * block word suspends the attack and it resumes after the block. 1: the
-	 * switch resets the attack word instead, so a parry costs its progress and
-	 * nothing resumes.
+	 * Parry word handling. 0: switching from a clean attack word to the block
+	 * word suspends the attack and it resumes after the block. 1: the switch
+	 * resets the attack word, so a parry costs its progress and nothing resumes.
+	 * Default 0, chosen by the sweeps (`scripts/out/sweep-v3.json`): it keeps
+	 * the parry cost low, so the reward rules are what decide a parry.
 	 */
 	parryResetsWord: 0,
 	/**
-	 * Rule variant. Share of a parried attack's base damage the defender takes
-	 * even when the parry succeeds. 0 (default): a successful parry deals no
-	 * damage. Stacks on top of any passive chip. A non-zero share can KO.
+	 * Share of a parried attack's base damage the defender still takes when the
+	 * parry succeeds. Default 0.5, chosen by the sweeps
+	 * (`scripts/out/sweep-v3.json`). A full-cancel parry made parrying dominant
+	 * at high WPM. Partial blocks stop that, and they stack with the passive
+	 * chip. A non-zero share can KO.
 	 */
-	blockDamageShare: 0,
+	blockDamageShare: 0.5,
 	/**
 	 * Move staling, as in Smash Bros. Each consecutive successful use of the
 	 * same move multiplies that attack's base damage by `staleFactor` once
-	 * more: with 0.7 the second repeat deals 0.7x, the third 0.49x. A
-	 * different move in between, or a new round, resets the count. 1 (default)
-	 * turns staling off.
+	 * more: with 0.8 the second repeat deals 0.8x, the third 0.64x. A different
+	 * move in between, or a new round, resets the count. 1 turns staling off.
+	 * Default 0.8, chosen by the sweeps (`scripts/out/sweep-v3.json`). With
+	 * partial blocks it makes mixing moves beat any single-move style for the
+	 * hero at 40, 70 and 100 WPM.
 	 */
-	staleFactor: 1,
+	staleFactor: 0.8,
 	/** Lowest multiplier staling can reach. */
 	staleFloor: 0.4,
 	/** Each later round of a match tightens the telegraph by this much. */

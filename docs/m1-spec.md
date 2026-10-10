@@ -270,6 +270,32 @@ So, in order:
 3. **Ladder last.** Calibrate goblin HP / windup scale per level with
    `simulateMatch`'s `maxHp` and `windupScale` once 1–2 are settled.
 
+### Rules decision (gameplay change — review this)
+
+Three sweeps (`pnpm sweep`, `sweep:variants`, `sweep:v3`; output in
+`scripts/out/`) against a defender that parries everything it can:
+
+| Tried                                       | Result                                                                                                                                                                          |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Parry reward only (stagger, meter, counter) | Always-parry still wins ~97 % of mirrors at 100 WPM, even with zero reward. Parrying itself was the problem.                                                                    |
+| Parry resets your word; block leaks damage  | Fixes high WPM for heavies, but jab spam (unparryable, rate ∝ WPM) wins at 100 WPM and heavy spam at 40 WPM (nobody can parry in time).                                         |
+| + move staling                              | Hero: every one-move style **loses** to mixed play at 40/70/100 WPM. Remaining dominance is fighter-specific (goblin combo + jabs, skeleton guard), left to per-fighter tuning. |
+
+Adopted:
+
+- **Block leaks 50 %** (`blockDamageShare 0.5`). A parry no longer
+  erases a heavy; it halves it and still staggers the attacker.
+- **Move staling** (`staleFactor 0.8`, floor 0.4): repeating the same move
+  back to back deals 0.8×, 0.64×… damage. Rewards mixing; the UI should show
+  it on the card.
+- **Shorter, cheaper parry reward**: stagger 600 ms (was 1300), meter 12
+  (was 25). Counter ×1.5 unchanged.
+- Your in-progress word is still kept when you parry (`parryResetsWord 0`).
+
+Rejected: a timing-window "just guard". Online it needs a window of several
+hundred ms to be fair at 200 ms RTT, which fast typists hit every time, and
+its balance would rest on an invented bot timing-error number.
+
 The CI test gates 70 WPM (runtime); the tuning target covers all three speeds.
 If 45–55 % proves unreachable at 40 or 100 WPM, pull fighter numbers toward
 the hero baseline before considering any change to the threshold, and only

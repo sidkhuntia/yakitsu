@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DuelMatch, type MatchEvent } from '../duelMatch'
-import { DUEL, type Side } from '../duelTuning'
+import { DUEL, type DuelRules, type Side } from '../duelTuning'
 import { FIGHTERS, type FighterDef } from '../fighters'
 import type { WordPicker } from '../playerDeck'
 import { seededRng } from '../rng'
@@ -33,11 +33,13 @@ function newMatch(
 	seed = 5,
 	p1: FighterDef = HERO,
 	p2: FighterDef = HERO,
+	rules: Partial<DuelRules> = {},
 ): DuelMatch {
 	return new DuelMatch({
 		seed,
 		fighters: { p1, p2 },
 		pick,
+		rules,
 	})
 }
 
@@ -71,7 +73,8 @@ function findEvent<T extends MatchEvent['t']>(
 
 describe('DuelMatch: blocks and parries', () => {
 	it('a heavy starts on completion, the defender is offered a block, and typing it parries', () => {
-		const m = newMatch()
+		// Full cancel: pinned, so the parry leaks no block chip.
+		const m = newMatch(5, HERO, HERO, { blockDamageShare: 0 })
 		m.startRound(0)
 		m.drain()
 
@@ -495,6 +498,10 @@ function bots(seed: number): Record<Side, TypistBot> {
  */
 function runBotMatch(frame: number): Snapshot {
 	const m = newMatch(11, HERO, FIGHTERS.mushroom)
+	// The mushroom starts with its meter full so its poison special is in
+	// play, as the scripted log in sim.test does. The default parry reward
+	// (meterOnParry 12) no longer funds it in this match by itself.
+	m.sim.fighters.p2.meter = 100
 	const b = bots(5)
 	m.startRound(0)
 	b.p1.reset(0)

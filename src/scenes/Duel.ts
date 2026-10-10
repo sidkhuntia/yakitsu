@@ -24,6 +24,7 @@ import { CardView } from '../systems/duel/CardView'
 import { DuelHud } from '../systems/duel/DuelHud'
 import { DUEL, type MoveId, type Side } from '../systems/duel/duelTuning'
 import { MUSIC, SFX } from '../systems/sfx'
+import { BACKDROP_LAYERS, BACKDROP_SCALE, FLOOR_Y } from '../systems/backdrop'
 
 type Phase = 'intro' | 'fight' | 'between' | 'over'
 
@@ -42,18 +43,11 @@ const HERO_STRIKE_FRAME = 3
 /** The guard pose (Take Hit, tinted blue) is held for this long. */
 const HERO_GUARD_MS = 260
 /**
- * The line both fighters stand on. It is the top edge of the rocks in the
- * forest backdrop, and the runner's avatar stands on the same line.
- */
-const FLOOR_Y = 680
-/**
  * Where the feet sit below the centre of a frame, measured from each sheet's
  * alpha bounds: Hero Knight at row 114 of 180, goblin at row 101 of 150.
  */
 const PLAYER_FEET_PX = 24
 const GOBLIN_FEET_PX = 26
-
-const BG_LAYERS = [11, 8, 5, 3, 2]
 
 const CARD_STYLE: Record<Slot, { accent: number; fontSize: number }> = {
 	jab: { accent: 0x64ffda, fontSize: 30 },
@@ -277,29 +271,20 @@ export default class Duel extends Phaser.Scene {
 	private buildWorld(): void {
 		const { width, height } = this.scale
 		this.cameras.main.setBackgroundColor('#0a0f16')
-		BG_LAYERS.forEach((n, i) => {
-			const key = `layer_${String(n).padStart(4, '0')}`
+		BACKDROP_LAYERS.forEach(({ key }, i) => {
 			if (this.textures.exists(key))
 				this.add
 					.tileSprite(0, 0, width, height, key)
 					.setOrigin(0)
+					.setTileScale(BACKDROP_SCALE)
 					.setDepth(-20 + i)
 		})
-		for (const [key, depth] of [
-			['ground_back', -1],
-			['ground_front', 0],
-		] as const) {
-			if (this.textures.exists(key))
-				this.add
-					.tileSprite(0, 0, width, height, key)
-					.setOrigin(0)
-					.setDepth(depth)
-		}
-		// Darken the backdrop so the fighters and cards own the frame.
+		// Darken the backdrop so the fighters and cards own the frame. Sits
+		// above every layer (-20 to -13) and below the fighters (10).
 		this.add
 			.rectangle(0, 0, width, height, 0x000000, 0.35)
 			.setOrigin(0)
-			.setDepth(-2)
+			.setDepth(-12)
 	}
 
 	private buildFighters(): void {

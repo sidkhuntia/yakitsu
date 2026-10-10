@@ -1,5 +1,6 @@
 import Phaser from 'phaser'
 import { loadAudio } from '../systems/sfx'
+import { loadBackdrop } from '../systems/backdrop'
 
 /**
  * Asset preloader.
@@ -67,14 +68,7 @@ export default class Boot extends Phaser.Scene {
 		this.load.script('words', 'data/words/words.js')
 
 		// --- world -----------------------------------------------------------
-		for (let n = 2; n <= 11; n++) {
-			this.load.image(
-				`layer_${String(n).padStart(4, '0')}`,
-				`assets/background/Layer_${String(n).padStart(4, '0')}.png`,
-			)
-		}
-		this.load.image('ground_back', 'assets/background/Layer_0001.png')
-		this.load.image('ground_front', 'assets/background/Layer_0000.png')
+		loadBackdrop(this.load)
 
 		// --- actors ----------------------------------------------------------
 		this.load.spritesheet('avatar_run', 'assets/character/Run.png', {

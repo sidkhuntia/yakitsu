@@ -9,6 +9,7 @@ import { Monster, MONSTER_TYPES, type MonsterType } from '../systems/Monster'
 import { bodyFont, displayFont } from '../systems/font'
 import { SettingsModal } from '../systems/SettingsModal'
 import { MUSIC, SFX } from '../systems/sfx'
+import { BACKDROP_LAYERS, BACKDROP_SCALE } from '../systems/backdrop'
 import { GameOverModal, type GameOverSummary } from '../systems/GameOverModal'
 import {
 	claimMilestone,
@@ -39,8 +40,6 @@ const MILESTONES = [10, 25, 50, 100, 150, 200, 250, 300, 400, 500]
 const MAX_CORPSES = 3
 
 const AVATAR_FRAME = 180
-/** Parallax layers, far to near. */
-const BG_LAYERS = [11, 8, 5, 3, 2]
 
 function overlaps(a: Box, b: Box): boolean {
 	return (
@@ -92,8 +91,11 @@ export default class Play extends Phaser.Scene {
 	/** How many words into the run we are still showing hints. */
 	private static readonly HINT_WORDS = 3
 
-	private backgroundLayers: Phaser.GameObjects.TileSprite[] = []
-	private groundLayers: Phaser.GameObjects.TileSprite[] = []
+	/** Backdrop layers, far to near, each with how far it moves per travel. */
+	private backdrop: {
+		sprite: Phaser.GameObjects.TileSprite
+		scroll: number
+	}[] = []
 
 	/**
 	 * `sound.add` hands back NoAudioSound / HTML5AudioSound / WebAudioSound
@@ -115,16 +117,7 @@ export default class Play extends Phaser.Scene {
 		this.load.image('bomb', 'assets/bomb.png')
 		this.load.script('words', 'data/words/words.js')
 
-		// The old build drew 14 full-screen layers every frame. Five is visually
-		// equivalent and roughly a third of the fill cost.
-		for (const n of BG_LAYERS) {
-			this.load.image(
-				`layer_${String(n).padStart(4, '0')}`,
-				`assets/background/Layer_${String(n).padStart(4, '0')}.png`,
-			)
-		}
-		this.load.image('ground_back', 'assets/background/Layer_0001.png')
-		this.load.image('ground_front', 'assets/background/Layer_0000.png')
+		// The backdrop layers are queued by Boot (see systems/backdrop.ts).
 
 		this.load.spritesheet('avatar_run', 'assets/character/Run.png', {
 			frameWidth: AVATAR_FRAME,
@@ -847,13 +840,10 @@ export default class Play extends Phaser.Scene {
 	 */
 	private scrollWorld(dt: number): void {
 		this.scrollX += this.monsterSpeed * dt
-		for (let i = 0; i < this.backgroundLayers.length; i++) {
-			// Index 0 is the most distant layer, so it scrolls slowest.
-			this.backgroundLayers[i].tilePositionX =
-				this.scrollX * (0.06 + i * 0.07)
-		}
-		for (let i = 0; i < this.groundLayers.length; i++) {
-			this.groundLayers[i].tilePositionX = this.scrollX * (1.0 + i * 0.25)
+		// tilePositionX counts texture pixels, and each tile is drawn at
+		// BACKDROP_SCALE, so divide by it to keep the on-screen travel exact.
+		for (const { sprite, scroll } of this.backdrop) {
+			sprite.tilePositionX = (this.scrollX * scroll) / BACKDROP_SCALE
 		}
 	}
 
@@ -960,28 +950,17 @@ export default class Play extends Phaser.Scene {
 
 	private buildParallax(): void {
 		const { width, height } = this.scale
-		BG_LAYERS.forEach((n, i) => {
-			const key = `layer_${String(n).padStart(4, '0')}`
+		BACKDROP_LAYERS.forEach(({ key, scroll }, i) => {
 			if (!this.textures.exists(key)) return
-			this.backgroundLayers.push(
-				this.add
+			this.backdrop.push({
+				sprite: this.add
 					.tileSprite(0, 0, width, height, key)
 					.setOrigin(0, 0)
+					.setTileScale(BACKDROP_SCALE)
 					.setDepth(-20 + i),
-			)
+				scroll,
+			})
 		})
-		for (const [key, depth] of [
-			['ground_back', -1],
-			['ground_front', 0],
-		] as const) {
-			if (!this.textures.exists(key)) continue
-			this.groundLayers.push(
-				this.add
-					.tileSprite(0, 0, width, height, key)
-					.setOrigin(0, 0)
-					.setDepth(depth),
-			)
-		}
 	}
 
 	private buildAvatar(): void {
@@ -1040,9 +1019,7 @@ export default class Play extends Phaser.Scene {
 
 	private onResize(): void {
 		const { width, height } = this.scale
-		for (const l of [...this.backgroundLayers, ...this.groundLayers]) {
-			l.setSize(width, height)
-		}
+		for (const { sprite } of this.backdrop) sprite.setSize(width, height)
 		this.avatar.setY(this.groundY())
 		this.vignette.setPosition(width / 2, height / 2)
 		this.vignette.setDisplaySize(width, height)

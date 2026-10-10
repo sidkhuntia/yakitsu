@@ -53,6 +53,8 @@ export type Signature =
 	| { kind: 'combo'; bonusPerLink: number; maxBonus: number }
 	/** Attacks aimed at this fighter wind up longer, so it parries more. */
 	| { kind: 'guard'; incomingWindupScale: number }
+	/** Takes a fixed share of damage from everything, chip and poison included. */
+	| { kind: 'armor'; damageTakenScale: number }
 	/** The named move leaves a poison that ticks once per second. */
 	| { kind: 'poison'; move: MoveId; dps: number; durationMs: number }
 	/** Every hit steals meter from the target. */
@@ -168,7 +170,7 @@ export const FIGHTERS: Record<FighterId, FighterDef> = {
 		moves: {
 			jab: jab({ damage: 3 }),
 			heavy: heavy({ damage: 15 }),
-			special: special({ damage: 32 }),
+			special: special({ damage: 31 }),
 		},
 		signature: { kind: 'combo', bonusPerLink: 2, maxBonus: 2 },
 		signatureText:
@@ -177,25 +179,25 @@ export const FIGHTERS: Record<FighterId, FighterDef> = {
 	skeleton: {
 		id: 'skeleton',
 		name: 'Skeleton',
-		title: 'Shield up, strike back',
-		maxHp: 122,
+		title: 'Hard to put down',
+		maxHp: 106,
 		moves: {
-			jab: jab({ damage: 2 }),
-			heavy: heavy({ damage: 7 }),
-			special: special({ damage: 27 }),
+			jab: jab({ damage: 3 }),
+			heavy: heavy({ damage: 12 }),
+			special: special({ damage: 22 }),
 		},
-		signature: { kind: 'guard', incomingWindupScale: 1.1 },
-		signatureText: 'Bone Guard: attacks against it wind up 10% slower.',
+		signature: { kind: 'armor', damageTakenScale: 0.9 },
+		signatureText: 'Bone Armor: takes 10% less damage from everything.',
 	},
 	mushroom: {
 		id: 'mushroom',
 		name: 'Mushroom',
 		title: 'Slow rot',
-		maxHp: 105,
+		maxHp: 101,
 		moves: {
 			jab: jab({ damage: 4 }),
 			heavy: heavy({ damage: 13 }),
-			special: special({ damage: 20 }),
+			special: special({ damage: 25 }),
 		},
 		signature: {
 			kind: 'poison',
@@ -212,11 +214,11 @@ export const FIGHTERS: Record<FighterId, FighterDef> = {
 		title: 'Feeds on focus',
 		maxHp: 93,
 		moves: {
-			jab: jab({ damage: 4 }),
-			heavy: heavy({ damage: 14 }),
+			jab: jab({ damage: 5 }),
+			heavy: heavy({ damage: 13 }),
 			special: special({ damage: 21 }),
 		},
-		signature: { kind: 'drain', meterPerHit: 8 },
-		signatureText: 'Gaze: every hit steals 8 meter from the target.',
+		signature: { kind: 'drain', meterPerHit: 9 },
+		signatureText: 'Gaze: every hit steals 9 meter from the target.',
 	},
 }

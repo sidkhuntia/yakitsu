@@ -352,7 +352,7 @@ export class DuelSim {
 			0,
 			Math.round(incoming.damage * this.rules.blockDamageShare),
 		)
-		const chip = passiveChip + blockChip
+		const chip = this.takenDamage(side, passiveChip + blockChip)
 		const defender = this.fighters[side]
 		defender.hp = Math.max(0, defender.hp - chip)
 		this.emit({
@@ -490,7 +490,7 @@ export class DuelSim {
 				Math.min(sig.maxBonus, defender.chain * sig.bonusPerLink) *
 				hit.stale
 		}
-		damage = Math.round(damage)
+		damage = this.takenDamage(defenderSide, damage)
 
 		defender.hp = Math.max(0, defender.hp - damage)
 		const stunScale = Math.max(
@@ -550,12 +550,25 @@ export class DuelSim {
 		if (defender.hp <= 0) this.endRound(attacker, 'ko')
 	}
 
+	/**
+	 * Damage `side` takes from `raw`, as a whole number. An armored fighter
+	 * takes `damageTakenScale` of it, but a hit that would deal at least 1 still
+	 * deals at least 1. Every other fighter takes `raw`, rounded.
+	 */
+	private takenDamage(side: Side, raw: number): number {
+		const rounded = Math.round(raw)
+		const sig = this.defs[side].signature
+		if (sig.kind !== 'armor' || rounded < 1) return rounded
+		return Math.max(1, Math.round(raw * sig.damageTakenScale))
+	}
+
 	private tickPoison(side: Side, at: number): void {
 		const f = this.fighters[side]
 		const poison = f.poison
 		if (!poison) return
-		f.hp = Math.max(0, f.hp - poison.dps)
-		this.emit({ t: 'poison', side, damage: poison.dps })
+		const dealt = this.takenDamage(side, poison.dps)
+		f.hp = Math.max(0, f.hp - dealt)
+		this.emit({ t: 'poison', side, damage: dealt })
 		const nextTickAt = at + POISON_TICK_MS
 		f.poison = nextTickAt <= poison.until ? { ...poison, nextTickAt } : null
 		if (f.hp <= 0) this.endRound(other(side), 'ko')

@@ -119,9 +119,9 @@ const damageKnob = (
  */
 export const KNOBS: Knob[] = [
 	maxHpKnob('goblin', 55, 100, 3),
-	damageKnob('goblin', 'jab', 2, 6, 1),
-	damageKnob('goblin', 'heavy', 5, 16, 2),
-	damageKnob('goblin', 'special', 10, 32, 2),
+	damageKnob('goblin', 'jab', 3, 5, 1),
+	damageKnob('goblin', 'heavy', 11, 16, 1),
+	damageKnob('goblin', 'special', 21, 31, 1),
 	{
 		name: 'goblin.bonusPerLink',
 		fighter: 'goblin',
@@ -149,26 +149,26 @@ export const KNOBS: Knob[] = [
 		},
 	},
 	maxHpKnob('skeleton', 100, 150, 3),
-	damageKnob('skeleton', 'jab', 2, 4, 1),
-	damageKnob('skeleton', 'heavy', 7, 22, 2),
-	damageKnob('skeleton', 'special', 12, 38, 2),
+	damageKnob('skeleton', 'jab', 3, 5, 1),
+	damageKnob('skeleton', 'heavy', 11, 16, 1),
+	damageKnob('skeleton', 'special', 21, 31, 1),
 	{
-		name: 'skeleton.incomingWindupScale',
+		name: 'skeleton.damageTakenScale',
 		fighter: 'skeleton',
-		min: 1.1,
-		max: 1.35,
-		unit: 0.05,
+		min: 0.7,
+		max: 0.92,
+		unit: 0.02,
 		step: 1,
 		group: 'signature',
-		get: (d) => sigOf(d, 'guard').incomingWindupScale,
+		get: (d) => sigOf(d, 'armor').damageTakenScale,
 		set: (d, v) => {
-			d.signature = { ...sigOf(d, 'guard'), incomingWindupScale: v }
+			d.signature = { ...sigOf(d, 'armor'), damageTakenScale: v }
 		},
 	},
 	maxHpKnob('mushroom', 80, 140, 3),
-	damageKnob('mushroom', 'jab', 2, 4, 1),
-	damageKnob('mushroom', 'heavy', 6, 19, 2),
-	damageKnob('mushroom', 'special', 8, 25, 2),
+	damageKnob('mushroom', 'jab', 3, 5, 1),
+	damageKnob('mushroom', 'heavy', 11, 16, 1),
+	damageKnob('mushroom', 'special', 21, 31, 1),
 	{
 		name: 'mushroom.dps',
 		fighter: 'mushroom',
@@ -196,9 +196,9 @@ export const KNOBS: Knob[] = [
 		},
 	},
 	maxHpKnob('eye', 55, 100, 3),
-	damageKnob('eye', 'jab', 2, 6, 1),
-	damageKnob('eye', 'heavy', 7, 20, 2),
-	damageKnob('eye', 'special', 13, 41, 2),
+	damageKnob('eye', 'jab', 3, 5, 1),
+	damageKnob('eye', 'heavy', 11, 16, 1),
+	damageKnob('eye', 'special', 21, 31, 1),
 	{
 		name: 'eye.meterPerHit',
 		fighter: 'eye',
@@ -224,6 +224,26 @@ export function buildDefs(ks: readonly number[]): Defs {
 		defs[knob.fighter] = base
 	})
 	return defs
+}
+
+/**
+ * Ratio rule: every tuned fighter's special/heavy must stay within 20% of the
+ * hero's ratio (26/13 = 2.0), i.e. 1.6 <= special/heavy <= 2.4. Written as
+ * integer inequalities (5s >= 8h and 5s <= 12h) so float rounding cannot
+ * change a verdict.
+ */
+export function ratiosOk(ks: readonly number[]): boolean {
+	return TUNED.every((f) => {
+		const h = valueOf(ks, `${f}.heavy`)
+		const s = valueOf(ks, `${f}.special`)
+		return 5 * s >= 8 * h && 5 * s <= 12 * h
+	})
+}
+
+function valueOf(ks: readonly number[], name: string): number {
+	const i = KNOBS.findIndex((k) => k.name === name)
+	if (i < 0) throw new Error(`no knob ${name}`)
+	return knobValue(KNOBS[i], ks[i])
 }
 
 export type Job =

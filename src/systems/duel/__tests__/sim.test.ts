@@ -31,6 +31,21 @@ const GUARD_SKELETON: FighterDef = {
 	moves: { ...HERO.moves, jab: { ...HERO.moves.jab, windupMs: 320 } },
 	signature: { kind: 'guard', incomingWindupScale: 1.2 },
 }
+const ARMOR_SKELETON: FighterDef = {
+	...HERO,
+	id: 'skeleton',
+	signature: { kind: 'armor', damageTakenScale: 0.85 },
+}
+const ARMOR_70: FighterDef = {
+	...HERO,
+	id: 'skeleton',
+	signature: { kind: 'armor', damageTakenScale: 0.7 },
+}
+const ARMOR_40: FighterDef = {
+	...HERO,
+	id: 'skeleton',
+	signature: { kind: 'armor', damageTakenScale: 0.4 },
+}
 const POISON_MUSHROOM: FighterDef = {
 	...HERO,
 	id: 'mushroom',
@@ -476,6 +491,101 @@ describe('DuelSim: signatures', () => {
 		low.advance(1500)
 		expect(low.fighters.p1.hp).toBe(2)
 		expect(hitDamages(low.drain())).toEqual([4, 4, 5])
+	})
+})
+
+describe('DuelSim: armor', () => {
+	it('scales the damage of a landed hit taken by an armored fighter', () => {
+		const s = sim(variant(HERO, 'jab', { damage: 20 }), ARMOR_SKELETON, {
+			rules: { staleFactor: 1 },
+		})
+		s.attack('p1', 'jab', false, 0)
+		s.advance(300)
+		expect(hitDamages(s.drain())).toEqual([17]) // 20 x 0.85
+		expect(s.fighters.p2.hp).toBe(HERO.maxHp - 17)
+	})
+
+	it("does not scale the armored fighter's own attacks", () => {
+		const s = sim(ARMOR_SKELETON, HERO, { rules: { staleFactor: 1 } })
+		s.attack('p1', 'jab', false, 0)
+		s.advance(300)
+		expect(hitDamages(s.drain())).toEqual([4])
+	})
+
+	it('a hit that would deal at least 1 still deals at least 1', () => {
+		const s = sim(variant(HERO, 'jab', { damage: 1 }), ARMOR_40)
+		s.attack('p1', 'jab', false, 0)
+		s.advance(300)
+		expect(hitDamages(s.drain())).toEqual([1]) // round(0.4) = 0, floored to 1
+	})
+
+	it('scales the parry chip taken by an armored fighter', () => {
+		const s = sim(HERO, ARMOR_SKELETON, {
+			rules: { blockDamageShare: 0.4 },
+		})
+		s.attack('p1', 'heavy', false, 0) // base damage 13
+		expect(s.parry('p2', false, 500)).toBe(true)
+		expect(s.fighters.p2.hp).toBe(HERO.maxHp - 4) // round(13 x 0.4) = 5, then x 0.85 -> 4
+		expect(s.drain()).toContainEqual(
+			expect.objectContaining({ t: 'parried', chip: 4 }),
+		)
+	})
+
+	it('scales each poison tick taken by an armored fighter', () => {
+		const s = sim(
+			variant(POISON_MUSHROOM, 'special', { meterCost: 0 }),
+			ARMOR_70,
+		)
+		s.attack('p1', 'special', false, 0) // lands 1300, first tick at 2300
+		s.advance(2300)
+		expect(poisonDamages(s.drain())).toEqual([2]) // round(3 x 0.7)
+	})
+
+	it('armor keeps granularity invariance', () => {
+		const play = (step: number | null) => {
+			const s = new DuelSim({
+				fighters: { p1: HERO, p2: ARMOR_SKELETON },
+			})
+			s.startRound(0)
+			const events: DuelEvent[] = [...s.drain()]
+			let now = 0
+			const catchUp = (to: number) => {
+				if (step !== null) {
+					while (now + step < to) {
+						now += step
+						s.advance(now)
+						events.push(...s.drain())
+					}
+				}
+				now = to
+				s.advance(to)
+				events.push(...s.drain())
+			}
+			const at = (t: number, act: () => void) => {
+				catchUp(t)
+				act()
+				events.push(...s.drain())
+			}
+			at(0, () => s.attack('p1', 'jab', false, 0))
+			at(150, () => s.attack('p2', 'heavy', false, 150))
+			at(1000, () => s.parry('p1', false, 1000))
+			at(1200, () => s.attack('p1', 'heavy', false, 1200))
+			at(2600, () => s.attack('p2', 'jab', false, 2600))
+			catchUp(4000)
+			return { hp: structuredClone(s.fighters), events }
+		}
+		const coarse = play(null)
+		expect(coarse.events).toContainEqual(
+			expect.objectContaining({
+				t: 'hit',
+				attacker: 'p1',
+				move: 'jab',
+				damage: 3,
+			}),
+		)
+		const everyMs = play(1)
+		expect(everyMs.hp).toEqual(coarse.hp)
+		expect(everyMs.events).toEqual(coarse.events)
 	})
 })
 

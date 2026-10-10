@@ -313,6 +313,15 @@ less different rather than miss the gate.
   anti-spam rule through it.
 - Mechanism tests build their own fighter data instead of reading the
   tunable roster, so re-tuning never breaks them.
+- **Skeleton's signature changed from Bone Guard to Bone Armor.** Guard
+  (attacks against it wind up slower) only matters near the typing speed
+  where a parry is just barely possible, so the optimiser found it worth a
+  73–79 % win rate at 70 WPM and a loss at 40 and 100. Armor (takes a share
+  less damage from everything) is worth the same at every speed. The `guard`
+  kind stays in the sim, tested, but no fighter uses it.
+- Signature effects that depend on parry timing make balance depend on
+  typing speed. New signatures should scale smoothly with how much a player
+  types, not switch on at a parry threshold.
 
 The CI test gates 70 WPM (runtime); the tuning target covers all three speeds.
 If 45–55 % proves unreachable at 40 or 100 WPM, pull fighter numbers toward

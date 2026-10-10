@@ -10,16 +10,21 @@
  *     fighter's jabber and heavy mirror vs mixed at n=40.
  *       loss = sum_P margin^2 + 2 * sum_D max(0, margin + 0.03)^2
  *     One-tricks should lose by at least 3% of max HP; mixed play should win.
- *   Phase 2 (win rate, release gate): 10 pairings at 70 WPM at n=200, plus
- *     the same mirrors at n=40.
+ *   Phase 2 (win rate, release gate): 10 pairings x {40, 70, 100} WPM at
+ *     n=160, plus the same mirrors at n=40.
  *       loss = sum_P max(0, |rate - 0.5| - 0.03)^2 + 2 * sum_D max(0, rate - 0.52)^2
- *     Refinement searches maxHp (step 1) first, then damages (step 1).
+ *     Steps on maxHp, damages and signature values, step 1 each.
+ *
+ * Feasibility: damages are bounded to the hero's profile (jab 3-5, heavy
+ * 11-16, special 21-31) and special/heavy must stay in 1.6-2.4. A candidate
+ * that breaks the ratio is rejected (infinite loss) and never simulated.
  *
  * Writes, under scripts/out/:
  *   tune-log.jsonl  one line per accepted move (plus start and end records)
  *   tune-best.json  checkpoint of the best numbers, rewritten on every move
  *
- * `--resume` restarts from tune-best.json.
+ * `--resume` starts from tune-best.json instead of fighters.ts. Either way
+ * the start is clamped into the bounds first.
  */
 
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -33,25 +38,27 @@ import {
 import {
 	KNOBS,
 	ONE_TRICKS,
+	TUNED,
 	WPMS,
 	buildDefs,
 	kMax,
 	knobIndex,
 	knobValue,
+	ratiosOk,
+	type Defs,
 	type Job,
 	type JobResult,
-	type OneTrick,
-	type Defs,
 	type Knob,
+	type OneTrick,
 } from './tuneFightersWorker'
 
 type Phase = 'margin' | 'win'
 
 const WORKERS = 10
 const MARGIN_MINUTES = 60
-const WIN_MINUTES = 30
+const WIN_MINUTES = 45
 const N_MARGIN_PAIR = 60
-const N_WIN_PAIR = 200
+const N_WIN_PAIR = 160
 const N_ONE = 40
 const EPS = 1e-12
 
@@ -149,11 +156,12 @@ for (let i = 0; i < FIGHTER_IDS.length; i++) {
 function cellsFor(phase: Phase): Cell[] {
 	const cells: Cell[] = []
 	for (const [a, b] of PAIRS) {
-		if (phase === 'margin') {
-			for (const wpm of WPMS)
-				cells.push({ kind: 'pair', a, b, wpm, n: N_MARGIN_PAIR })
-		} else {
-			cells.push({ kind: 'pair', a, b, wpm: 70, n: N_WIN_PAIR })
+		for (const wpm of WPMS) {
+			cells.push(
+				phase === 'margin'
+					? { kind: 'pair', a, b, wpm, n: N_MARGIN_PAIR }
+					: { kind: 'pair', a, b, wpm, n: N_WIN_PAIR },
+			)
 		}
 	}
 	for (const fighter of FIGHTER_IDS) {
@@ -225,7 +233,10 @@ async function evaluate(cands: number[][], phase: Phase): Promise<Score[]> {
 	const todo = new Map<string, number[]>()
 	for (const ks of cands) {
 		const key = keyOf(ks)
-		if (!cache.has(key) && !todo.has(key)) todo.set(key, ks)
+		if (cache.has(key) || todo.has(key)) continue
+		// Ratio-infeasible candidates are never simulated.
+		if (!ratiosOk(ks)) cache.set(key, { loss: Infinity, cells: [] })
+		else todo.set(key, ks)
 	}
 	const cells = cellsFor(phase)
 	await Promise.all(
@@ -247,8 +258,8 @@ async function evaluate(cands: number[][], phase: Phase): Promise<Score[]> {
 
 // ----------------------------------------------------------------- state
 
-// Starting point: the numbers currently in fighters.ts.
-let ks: number[] = KNOBS.map((k) => knobIndex(k, k.get(FIGHTERS[k.fighter])))
+// Search indices. Set in main from fighters.ts (or the checkpoint), clamped.
+let ks: number[] = []
 let accepted = 0
 let phaseNow: Phase = 'margin'
 
@@ -284,6 +295,54 @@ function checkpoint(loss: number, cur: Score, status: string): void {
 
 function logLine(rec: Record<string, unknown>): void {
 	appendFileSync(LOG_FILE, JSON.stringify(rec) + '\n')
+}
+
+/**
+ * Map raw starting values into the bounds: snap each to its grid and clamp,
+ * then fix any special/heavy ratio outside 1.6-2.4 by moving special into its
+ * feasible range (or heavy, if special has no room). Every change is logged.
+ * Returns search indices.
+ */
+function clampStart(raw: number[]): number[] {
+	const snap = (k: Knob, v: number): number => {
+		const i = Math.min(
+			kMax(k),
+			Math.max(0, Math.round((v - k.min) / k.unit)),
+		)
+		return knobValue(k, i)
+	}
+	const vals = KNOBS.map((k, i) => snap(k, raw[i]))
+	KNOBS.forEach((k, i) => {
+		if (vals[i] !== raw[i]) {
+			console.log(`clamped ${k.name} ${raw[i]} -> ${vals[i]}`)
+		}
+	})
+	const at = (name: string) => KNOBS.findIndex((k) => k.name === name)
+	for (const f of TUNED) {
+		const hi = at(`${f}.heavy`)
+		const si = at(`${f}.special`)
+		const h = vals[hi]
+		const s = vals[si]
+		if (5 * s >= 8 * h && 5 * s <= 12 * h) continue
+		const sK = KNOBS[si]
+		const hK = KNOBS[hi]
+		const sLo = Math.max(sK.min, Math.ceil((8 * h) / 5))
+		const sHi = Math.min(sK.max, Math.floor((12 * h) / 5))
+		if (sLo <= sHi) {
+			vals[si] = Math.min(sHi, Math.max(sLo, s))
+		} else {
+			const hLo = Math.max(hK.min, Math.ceil((5 * s) / 12))
+			const hHi = Math.min(hK.max, Math.floor((5 * s) / 8))
+			if (hLo > hHi) {
+				throw new Error(`no ratio-feasible heavy/special for ${f}`)
+			}
+			vals[hi] = Math.min(hHi, Math.max(hLo, h))
+		}
+		console.log(
+			`ratio fix ${f}: heavy ${h} -> ${vals[hi]}, special ${s} -> ${vals[si]}`,
+		)
+	}
+	return KNOBS.map((k, i) => knobIndex(k, vals[i]))
 }
 
 // ---------------------------------------------------------------- search
@@ -388,25 +447,23 @@ async function main(): Promise<void> {
 	mkdirSync(OUT_DIR, { recursive: true })
 
 	let resumedPhase: Phase | 'done' | null = null
+	let raw = KNOBS.map((k) => k.get(FIGHTERS[k.fighter]))
 	if (RESUME) {
 		const saved = JSON.parse(readFileSync(BEST_FILE, 'utf8')) as {
 			phase: Phase | 'done'
 			params: Record<string, number>
 		}
 		// Map by name, not position: the knob list can change between runs.
-		// Out-of-bound values are clamped; new knobs start at fighters.ts.
-		ks = KNOBS.map((k) => {
-			const v = saved.params[k.name] ?? k.get(FIGHTERS[k.fighter])
-			const clamped = Math.min(k.max, Math.max(k.min, v))
-			if (clamped !== v)
-				console.log(`clamped ${k.name} ${v} -> ${clamped}`)
-			return knobIndex(k, clamped)
-		})
+		raw = KNOBS.map(
+			(k) => saved.params[k.name] ?? k.get(FIGHTERS[k.fighter]),
+		)
 		resumedPhase = saved.phase
 		console.log(`resumed from ${BEST_FILE} (phase ${saved.phase})`)
 	} else {
+		console.log('starting from the numbers in fighters.ts')
 		writeFileSync(LOG_FILE, '')
 	}
+	ks = clampStart(raw)
 	logLine({
 		event: 'start',
 		resume: RESUME,
@@ -421,8 +478,8 @@ async function main(): Promise<void> {
 	)
 	logLine({ event: 'startLoss', loss: startScore.loss })
 
-	// Always run the margin phase: a resumed checkpoint may come from before a
-	// change to the objective (roster, combo rule), so it is re-optimised first.
+	// Always run the margin phase: the start may come from a checkpoint made
+	// under an older objective, so it is re-optimised first.
 	{
 		await search({
 			phase: 'margin',
@@ -437,19 +494,16 @@ async function main(): Promise<void> {
 		checkpoint(m.loss, m, 'margin done')
 	}
 
-	// Refinement: maxHp at step 1, then damages at step 1, on win rates.
-	const refineIdx = KNOBS.map((_, i) => i).filter(
-		(i) => KNOBS[i].group === 'maxHp' || KNOBS[i].group === 'damage',
+	// Win-rate phase over all three speeds: maxHp, then damages, then the
+	// signature values, each at step 1.
+	const groupOrder = ['maxHp', 'damage', 'signature'] as const
+	const order = groupOrder.flatMap((g) =>
+		KNOBS.map((_, i) => i).filter((i) => KNOBS[i].group === g),
 	)
-	const order = [
-		...refineIdx.filter((i) => KNOBS[i].group === 'maxHp'),
-		...refineIdx.filter((i) => KNOBS[i].group === 'damage'),
-	]
-	const stepsWin = KNOBS.map(() => 1)
 	await search({
 		phase: 'win',
 		indices: order,
-		steps: stepsWin,
+		steps: KNOBS.map(() => 1),
 		deadline: Date.now() + WIN_MINUTES * 60_000,
 		stopAtZero: true,
 	})
@@ -478,7 +532,7 @@ async function main(): Promise<void> {
 			`${label(o.cell).padEnd(34)} margin ${(o.margin * 100).toFixed(1)}%  rate ${(o.rate * 100).toFixed(1)}%`,
 		)
 	}
-	console.log('\n== final cells (win phase, n=200 pairs) ==')
+	console.log('\n== final cells (win phase, n=160 pairs, 40/70/100 WPM) ==')
 	for (const o of w.cells) {
 		console.log(
 			`${label(o.cell).padEnd(34)} rate ${(o.rate * 100).toFixed(1)}%`,

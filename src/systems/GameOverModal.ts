@@ -1,5 +1,6 @@
 import Phaser from 'phaser'
 import { loadData } from './persistence'
+import { SFX } from './sfx'
 import type { DifficultyProfile } from './tuning'
 
 export interface GameOverSummary {
@@ -51,8 +52,8 @@ export class GameOverModal extends Phaser.GameObjects.Container {
 		const accent = summary.difficulty.color
 		const hex = `#${accent.toString(16).padStart(6, '0')}`
 
-		this.clickSound = scene.cache.audio.exists('clickSound')
-			? scene.sound.add('clickSound', { volume: 0.5 })
+		this.clickSound = scene.cache.audio.exists(SFX.uiClick.key)
+			? scene.sound.add(SFX.uiClick.key, { volume: 0.5 })
 			: undefined
 
 		const dim = scene.add

@@ -1,4 +1,5 @@
 import Phaser from 'phaser'
+import { SFX } from './sfx'
 import {
 	clearHighscores,
 	loadData,
@@ -120,8 +121,8 @@ export class SettingsModal extends Phaser.GameObjects.Container {
 		const { width, height } = scene.scale
 		const cx = width / 2
 
-		this.clickSound = scene.cache.audio.exists('clickSound')
-			? scene.sound.add('clickSound', { volume: 0.5 })
+		this.clickSound = scene.cache.audio.exists(SFX.uiClick.key)
+			? scene.sound.add(SFX.uiClick.key, { volume: 0.5 })
 			: undefined
 
 		const dim = scene.add

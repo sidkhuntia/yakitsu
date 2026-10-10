@@ -8,6 +8,7 @@ import { WordDisplay } from '../systems/WordDisplay'
 import { Monster, MONSTER_TYPES, type MonsterType } from '../systems/Monster'
 import { bodyFont, displayFont } from '../systems/font'
 import { SettingsModal } from '../systems/SettingsModal'
+import { MUSIC, SFX } from '../systems/sfx'
 import { GameOverModal, type GameOverSummary } from '../systems/GameOverModal'
 import {
 	claimMilestone,
@@ -101,7 +102,6 @@ export default class Play extends Phaser.Scene {
 	 * these guards, so the game degrades to silence instead of throwing.
 	 */
 	private bgMusic?: Phaser.Sound.BaseSound
-	private runLoop?: Phaser.Sound.BaseSound
 	private sfx: Record<string, Phaser.Sound.BaseSound> = {}
 
 	constructor() {
@@ -1102,30 +1102,24 @@ export default class Play extends Phaser.Scene {
 
 	private setupAudio(): void {
 		const s = this.settings
-		this.bgMusic = this.sound.add('bgMusic', {
+		this.bgMusic = this.sound.add(MUSIC.fight.key, {
 			volume: s.muted ? 0 : s.musicVolume,
 			loop: true,
 		})
 		if (!s.muted) this.bgMusic.play()
 
-		// This loop was created and then never started, so the run ambience was
-		// silent. Play it only when unmuted, matching bgMusic.
-		this.runLoop = this.sound.add('runSound', {
-			volume: s.muted ? 0 : s.sfxVolume * 0.22,
-			loop: true,
-		})
-		if (!s.muted) this.runLoop.play()
-
+		// Logical event -> sound key. There is no run-ambience loop: the old
+		// one was a single unlicensed clip, and the fight track covers the run.
 		const map: Record<string, string> = {
-			type: 'clickSound',
-			error: 'monsterHitSound',
-			hurt: 'monsterHitSound',
-			kill: 'monsterHitSound',
-			levelup: 'speedUpSound',
-			powerup: 'speedUpSound',
-			danger: 'monsterHitSound',
-			pause: 'pauseSound',
-			unpause: 'unpauseSound',
+			type: SFX.keyType.key,
+			error: SFX.mistake.key,
+			hurt: SFX.hitHeavy.key,
+			kill: SFX.ko.key,
+			levelup: SFX.levelUp.key,
+			powerup: SFX.powerUp.key,
+			danger: SFX.danger.key,
+			pause: SFX.pause.key,
+			unpause: SFX.unpause.key,
 		}
 		for (const [logical, physical] of Object.entries(map)) {
 			if (!this.cache.audio.exists(physical)) continue
@@ -1160,7 +1154,6 @@ export default class Play extends Phaser.Scene {
 	private applyVolumes(): void {
 		const s = this.settings
 		this.setVolume(this.bgMusic, s.muted ? 0 : s.musicVolume)
-		this.setVolume(this.runLoop, s.muted ? 0 : s.sfxVolume * 0.22)
 		for (const [key, sfx] of Object.entries(this.sfx)) {
 			this.setVolume(sfx, s.sfxVolume * this.sfxGain(key))
 		}
@@ -1175,7 +1168,6 @@ export default class Play extends Phaser.Scene {
 
 	private stopAllSounds(): void {
 		this.bgMusic?.stop()
-		this.runLoop?.stop()
 		for (const s of Object.values(this.sfx)) s.stop()
 	}
 

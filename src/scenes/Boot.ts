@@ -1,4 +1,5 @@
 import Phaser from 'phaser'
+import { loadAudio } from '../systems/sfx'
 
 /**
  * Asset preloader.
@@ -56,17 +57,7 @@ export default class Boot extends Phaser.Scene {
 		this.load.image('menuBackground', 'assets/menu_background.webp')
 		this.load.image('gameOverBackground', 'assets/gameover_background.webp')
 
-		this.load.audio('bgMusic', 'assets/audio/background_music.mp3')
-		this.load.audio(
-			'menuMusic',
-			'assets/audio/ui/menu_background_music.mp3',
-		)
-		this.load.audio('clickSound', 'assets/audio/ui/click.mp3')
-		this.load.audio('pauseSound', 'assets/audio/ui/pause.mp3')
-		this.load.audio('unpauseSound', 'assets/audio/ui/unpause.mp3')
-		this.load.audio('runSound', 'assets/audio/avatar/run.mp3')
-		this.load.audio('speedUpSound', 'assets/audio/avatar/speed_up.mp3')
-		this.load.audio('monsterHitSound', 'assets/audio/monsters/hit.mp3')
+		loadAudio(this.load)
 
 		// --- power-ups -------------------------------------------------------
 		this.load.image('ice', 'assets/ice.png')
@@ -91,7 +82,17 @@ export default class Boot extends Phaser.Scene {
 			frameHeight: 180,
 		})
 
-		// Duel mode: hero reactions, and the goblin's stance and swing.
+		// Duel mode: hero stance, swings, reactions, and the goblin's stance and swing.
+		for (const [key, file] of [
+			['avatar_idle', 'Idle'],
+			['avatar_attack1', 'Attack1'],
+			['avatar_attack2', 'Attack2'],
+		] as const) {
+			this.load.spritesheet(key, `assets/character/${file}.png`, {
+				frameWidth: 180,
+				frameHeight: 180,
+			})
+		}
 		this.load.spritesheet('avatar_hit', 'assets/character/Take Hit.png', {
 			frameWidth: 180,
 			frameHeight: 180,

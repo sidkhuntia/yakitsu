@@ -233,8 +233,12 @@ export class DuelMatch implements BotHost {
 - `winRateMatrix(wpm, style, n)`: each unordered pair, n seeds, sides swapped
   on half.
 - `pnpm balance` prints matrices at 40 / 70 / 100 WPM × styles.
-- **Release gate (test):** at 70 WPM, `mixed` vs `mixed`, every pairing of
-  different fighters wins 45–55 %. Fixed seeds, runs in < 20 s.
+- **Release gate (test):** at 40, 70 and 100 WPM, `mixed` vs `mixed` (both
+  always parrying), every pairing of different fighters wins **40–60 %** on
+  1000 fixed-seed matches. Agreed with the product owner on 2026-10-10 after
+  seven optimiser runs reached 40.3–59.7 % but not 45–55 %: the bots are far
+  more consistent than people, which exaggerates matchup gaps. 45–55 % stays
+  the target, re-tuned from anonymous live match data after launch.
 - **Dominance check (test):** for every fighter, no style (`turtle`, `heavy`,
   `jabber`) beats `mixed` in a mirror by more than 60 %. Checking jabber
   alone was too narrow: the first harness run showed turtle (parry

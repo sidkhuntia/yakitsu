@@ -17,6 +17,16 @@ import { loadWordPicker } from './wordsFixture'
 
 /** Matches per pairing for the release gate. Deterministic: fixed seeds. */
 const GATE_N = 1000
+/** Speeds the release gate covers. */
+const GATE_WPMS = [40, 70, 100]
+/**
+ * The release band, agreed with the product owner on 2026-10-10. The bots
+ * are far more consistent than people, which exaggerates matchup gaps, so
+ * 40-60 here is a smaller real-world gap. 45-55 stays the target, re-tuned
+ * from anonymous live match data after launch.
+ */
+const GATE_MIN = 0.4
+const GATE_MAX = 0.6
 /** Matches per mirror for the dominance check. Deterministic: fixed seeds. */
 const MIRROR_N = 80
 /** Matches per sanity comparison. */
@@ -34,29 +44,37 @@ const RATIONAL: Partial<BotProfile> = { parryChance: 1 }
 
 const pick = loadWordPicker()
 
-let gateCache: PairRow[] | null = null
-/** The 70 WPM mixed-vs-mixed matrix, computed once for the gate and sanity. */
-function gate70(): PairRow[] {
-	gateCache ??= winRateMatrix({
-		wpm: 70,
-		n: GATE_N,
-		pick,
-		profileOverrides: RATIONAL,
-	})
-	return gateCache
+const gateCache = new Map<number, PairRow[]>()
+/** A mixed-vs-mixed matrix, computed once per speed for the gate and sanity. */
+function gateMatrix(wpm: number): PairRow[] {
+	let rows = gateCache.get(wpm)
+	if (!rows) {
+		rows = winRateMatrix({
+			wpm,
+			n: GATE_N,
+			pick,
+			profileOverrides: RATIONAL,
+		})
+		gateCache.set(wpm, rows)
+	}
+	return rows
 }
 
 describe('balance: release gate', () => {
-	it('at 70 WPM, mixed vs mixed, every pairing of different fighters wins 45-55%', () => {
-		const rows = gate70()
-		expect(rows).toHaveLength(
-			(FIGHTER_IDS.length * (FIGHTER_IDS.length - 1)) / 2,
-		)
-		const off = rows
-			.filter((r) => r.rate < 0.45 || r.rate > 0.55)
-			.map((r) => `${r.a} vs ${r.b}: ${(r.rate * 100).toFixed(1)}%`)
-		expect(off).toEqual([])
-	}, 30_000)
+	it.each(GATE_WPMS)(
+		'at %i WPM, mixed vs mixed, every pairing of different fighters wins 40-60%',
+		(wpm) => {
+			const rows = gateMatrix(wpm)
+			expect(rows).toHaveLength(
+				(FIGHTER_IDS.length * (FIGHTER_IDS.length - 1)) / 2,
+			)
+			const off = rows
+				.filter((r) => r.rate < GATE_MIN || r.rate > GATE_MAX)
+				.map((r) => `${r.a} vs ${r.b}: ${(r.rate * 100).toFixed(1)}%`)
+			expect(off).toEqual([])
+		},
+		60_000,
+	)
 })
 
 describe('balance: dominance', () => {
@@ -139,7 +157,7 @@ describe('balance: sanity', () => {
 	})
 
 	it('at 70 WPM matches end by KO more often than by time', () => {
-		const rows = gate70()
+		const rows = gateMatrix(70)
 		const meanKo = rows.reduce((sum, r) => sum + r.koShare, 0) / rows.length
 		expect(meanKo).toBeGreaterThan(0.5)
 	})

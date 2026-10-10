@@ -15,7 +15,7 @@
 
 import { DuelSim, type DuelEvent } from './duelSim'
 import type { FighterDef } from './fighters'
-import { other, type MoveId, type Side } from './duelTuning'
+import { other, type DuelRules, type MoveId, type Side } from './duelTuning'
 import { PlayerDeck, type KeyResult, type WordPicker } from './playerDeck'
 import type { BotHost, TypistBot } from './typistBot'
 
@@ -27,6 +27,8 @@ export interface MatchOptions {
 	pick: WordPicker
 	maxHp?: Partial<Record<Side, number>>
 	windupScale?: Partial<Record<Side, number>>
+	/** Overrides for `DUEL`, passed through to the sim. */
+	rules?: Partial<DuelRules>
 }
 
 export type MatchEvent =
@@ -75,6 +77,7 @@ export class DuelMatch implements BotHost {
 			fighters: options.fighters,
 			maxHp: options.maxHp,
 			windupScale: options.windupScale,
+			rules: options.rules,
 		})
 		this.decks = {
 			p1: new PlayerDeck(options.pick, options.seed, options.fighters.p1),

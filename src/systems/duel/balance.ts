@@ -11,8 +11,13 @@
  */
 
 import { DuelMatch, type MatchEvent } from './duelMatch'
-import { DUEL, other, type MoveId, type Side } from './duelTuning'
-import { FIGHTERS, FIGHTER_IDS, type FighterId } from './fighters'
+import { other, type DuelRules, type MoveId, type Side } from './duelTuning'
+import {
+	FIGHTERS,
+	FIGHTER_IDS,
+	type FighterDef,
+	type FighterId,
+} from './fighters'
 import type { WordPicker } from './playerDeck'
 import { mixSeed, seededRng } from './rng'
 import {
@@ -46,6 +51,14 @@ export interface SideStats {
 	moves: Record<MoveId, MoveStats>
 }
 
+/** Tuning that every match in a batch shares. */
+export interface RuleOverrides {
+	/** Overrides for `DUEL`. */
+	rules?: Partial<DuelRules>
+	/** Replaces `FIGHTERS[id]` for that fighter's matches. */
+	defs?: Partial<Record<FighterId, FighterDef>>
+}
+
 export interface SimulateOptions {
 	/** Fighter on the p1 side. */
 	a: FighterId
@@ -55,6 +68,12 @@ export interface SimulateOptions {
 	profileB: BotProfile
 	seed: number
 	pick: WordPicker
+	/** Overrides for `DUEL`. */
+	rules?: Partial<DuelRules>
+	maxHp?: Partial<Record<Side, number>>
+	windupScale?: Partial<Record<Side, number>>
+	/** Replaces the FIGHTERS entry for the p1 side (`a`) or the p2 side (`b`). */
+	defs?: { a?: FighterDef; b?: FighterDef }
 }
 
 export interface MatchResult {
@@ -96,15 +115,21 @@ function emptyStats(): Record<Side, SideStats> {
 /**
  * Play one full best-of-three between two bots.
  *
- * Each round starts `DUEL.introMs` after the previous `roundOver`. Both bots
+ * Each round starts `rules.introMs` after the previous `roundOver`. Both bots
  * are reset at every round start. A draw counts as a round with no winner
  * and the match goes on.
  */
 export function simulateMatch(opts: SimulateOptions): MatchResult {
 	const match = new DuelMatch({
 		seed: opts.seed,
-		fighters: { p1: FIGHTERS[opts.a], p2: FIGHTERS[opts.b] },
+		fighters: {
+			p1: opts.defs?.a ?? FIGHTERS[opts.a],
+			p2: opts.defs?.b ?? FIGHTERS[opts.b],
+		},
 		pick: opts.pick,
+		maxHp: opts.maxHp,
+		windupScale: opts.windupScale,
+		rules: opts.rules,
 	})
 	const bots: Record<Side, TypistBot> = {
 		p1: new TypistBot(
@@ -182,7 +207,7 @@ export function simulateMatch(opts: SimulateOptions): MatchResult {
 			endedBy = 'cap'
 			endAt = now
 		} else if (roundEnded) {
-			restartAt = now + DUEL.introMs
+			restartAt = now + match.sim.rules.introMs
 		}
 	}
 
@@ -249,7 +274,7 @@ export interface PairRow {
 	movesB: Record<MoveId, MoveStats>
 }
 
-export interface MatrixOptions {
+export interface MatrixOptions extends RuleOverrides {
 	wpm: number
 	/** Style of the fighter listed first in each pair. Default 'mixed'. */
 	styleA?: BotStyle
@@ -274,7 +299,9 @@ function playPair(
 	n: number,
 	pairSeed: (i: number) => number,
 	pick: WordPicker,
+	extra: RuleOverrides,
 ): PairRow {
+	const defOf = (id: FighterId) => extra.defs?.[id]
 	let aWins = 0
 	let duration = 0
 	let rounds = 0
@@ -285,16 +312,24 @@ function playPair(
 	for (let i = 0; i < n; i++) {
 		const swap = i % 2 === 1
 		const seed = pairSeed(i)
+		const shared = { seed, pick, rules: extra.rules }
 		const r = swap
 			? simulateMatch({
+					...shared,
 					a: b,
 					b: a,
 					profileA: pb,
 					profileB: pa,
-					seed,
-					pick,
+					defs: { a: defOf(b), b: defOf(a) },
 				})
-			: simulateMatch({ a, b, profileA: pa, profileB: pb, seed, pick })
+			: simulateMatch({
+					...shared,
+					a,
+					b,
+					profileA: pa,
+					profileB: pb,
+					defs: { a: defOf(a), b: defOf(b) },
+				})
 		const aSide: Side = swap ? 'p2' : 'p1'
 		if (r.winner === aSide) aWins++
 		duration += r.durationMs
@@ -354,6 +389,7 @@ export function winRateMatrix(opts: MatrixOptions): PairRow[] {
 					opts.n,
 					(k) => mixSeed(ia, ib, k),
 					opts.pick,
+					opts,
 				),
 			)
 		}
@@ -372,6 +408,7 @@ export function mirrorRate(
 	wpm: number,
 	n: number,
 	pick: WordPicker,
+	extra: RuleOverrides = {},
 ): PairRow {
 	const fi = FIGHTER_IDS.indexOf(fighter)
 	return playPair(
@@ -382,5 +419,6 @@ export function mirrorRate(
 		n,
 		(k) => mixSeed(fi, 0x5171, k),
 		pick,
+		extra,
 	)
 }

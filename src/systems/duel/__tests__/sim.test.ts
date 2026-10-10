@@ -560,3 +560,26 @@ describe('DuelSim: granularity invariance', () => {
 		expect(every16.events).toEqual(coarse.events)
 	})
 })
+
+describe('DuelSim: rules', () => {
+	it('uses DUEL unless a rule is overridden', () => {
+		const s = new DuelSim({ fighters: { p1: HERO, p2: HERO } })
+		expect(s.rules).toEqual(DUEL)
+	})
+
+	it('an override changes behaviour and leaves other rules alone', () => {
+		const s = new DuelSim({
+			fighters: { p1: HERO, p2: HERO },
+			rules: { parryStaggerMs: 500 },
+		})
+		expect(s.rules.parryStaggerMs).toBe(500)
+		expect(s.rules.meterOnParry).toBe(DUEL.meterOnParry)
+
+		s.startRound(0)
+		s.drain()
+		s.attack('p2', 'heavy', false, 0)
+		s.parry('p1', false, 500)
+		expect(s.canAct('p2', 999)).toBe(false)
+		expect(s.canAct('p2', 1000)).toBe(true)
+	})
+})

@@ -35,3 +35,5 @@ node_modules/
 # Agent/test scratch output
 .playwright-mcp/
 shot-*.png
+scripts/out/
+assets-src/

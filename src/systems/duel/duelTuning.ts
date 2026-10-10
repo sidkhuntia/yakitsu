@@ -54,3 +54,10 @@ export const DUEL = {
 	/** Each later round of a match tightens the telegraph by this much. */
 	roundTightening: 0.05,
 } as const
+
+/**
+ * A full set of duel rule values, keyed like `DUEL`. Typed as plain numbers
+ * (not the literal types `as const` gives DUEL) so the balance harness can
+ * override any of them.
+ */
+export type DuelRules = { -readonly [K in keyof typeof DUEL]: number }

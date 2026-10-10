@@ -13,7 +13,13 @@
  */
 
 import type { FighterDef, FighterMove } from './fighters'
-import { DUEL, other, type MoveId, type Side } from './duelTuning'
+import {
+	DUEL,
+	other,
+	type DuelRules,
+	type MoveId,
+	type Side,
+} from './duelTuning'
 
 const SIDES: readonly Side[] = ['p1', 'p2']
 
@@ -125,6 +131,8 @@ export interface DuelOptions {
 	maxHp?: Partial<Record<Side, number>>
 	/** Multiplier on windups of attacks thrown BY this side. Default 1. */
 	windupScale?: Partial<Record<Side, number>>
+	/** Overrides for `DUEL`. Unset keys keep the DUEL value. */
+	rules?: Partial<DuelRules>
 }
 
 /** Something `advance` has to resolve. */
@@ -149,8 +157,11 @@ export class DuelSim {
 	readonly defs: Record<Side, FighterDef>
 	readonly fighters: Record<Side, FighterState>
 	private readonly windupScale: Record<Side, number>
+	/** Every rule value this sim uses: `DUEL`, with any overrides applied. */
+	readonly rules: DuelRules
 
 	constructor(options: DuelOptions) {
+		this.rules = { ...DUEL, ...options.rules }
 		this.defs = options.fighters
 		this.fighters = {
 			p1: freshFighter(options.maxHp?.p1 ?? options.fighters.p1.maxHp),
@@ -181,7 +192,7 @@ export class DuelSim {
 				lastAttackAt: now,
 			}
 		}
-		this.roundEndsAt = now + DUEL.roundTimeMs
+		this.roundEndsAt = now + this.rules.roundTimeMs
 		this.phase = 'fight'
 		this.emit({ t: 'roundStart', round: this.round })
 	}
@@ -216,7 +227,7 @@ export class DuelSim {
 	isPassive(side: Side, now: number): boolean {
 		return (
 			this.phase === 'fight' &&
-			now - this.fighters[side].lastAttackAt > DUEL.passiveMs
+			now - this.fighters[side].lastAttackAt > this.rules.passiveMs
 		)
 	}
 
@@ -294,14 +305,15 @@ export class DuelSim {
 		const passive = this.isPassive(side, now)
 		const rewarded = !passive
 		if (rewarded) {
-			attacker.staggerUntil = now + DUEL.parryStaggerMs
+			attacker.staggerUntil = now + this.rules.parryStaggerMs
 			this.gainMeter(
 				side,
-				DUEL.meterOnParry + (perfect ? DUEL.meterOnPerfect : 0),
+				this.rules.meterOnParry +
+					(perfect ? this.rules.meterOnPerfect : 0),
 			)
 		}
 		const chip = passive
-			? Math.max(1, Math.round(incoming.damage * DUEL.passiveChip))
+			? Math.max(1, Math.round(incoming.damage * this.rules.passiveChip))
 			: 0
 		const defender = this.fighters[side]
 		defender.hp = Math.max(0, defender.hp - chip)
@@ -320,7 +332,7 @@ export class DuelSim {
 	mistake(side: Side, now: number): void {
 		this.advance(now)
 		if (this.phase !== 'fight') return
-		this.gainMeter(side, DUEL.meterOnMistake)
+		this.gainMeter(side, this.rules.meterOnMistake)
 		this.emit({ t: 'mistake', side })
 	}
 
@@ -418,8 +430,8 @@ export class DuelSim {
 		const counter = hit.landsAt < defender.staggerUntil
 
 		let damage = hit.damage
-		if (hit.perfect) damage *= DUEL.perfectMultiplier
-		if (counter) damage *= DUEL.counterMultiplier
+		if (hit.perfect) damage *= this.rules.perfectMultiplier
+		if (counter) damage *= this.rules.counterMultiplier
 		if (
 			sig.kind === 'resolve' &&
 			attackerState.hp / attackerState.maxHp <= sig.hpThreshold
@@ -429,7 +441,7 @@ export class DuelSim {
 		// Each hit that follows quickly on the last stuns for less, so no
 		// rhythm of attacks can keep a fighter locked down indefinitely.
 		defender.chain =
-			hit.landsAt - defender.lastHitAt <= DUEL.chainWindowMs
+			hit.landsAt - defender.lastHitAt <= this.rules.chainWindowMs
 				? defender.chain + 1
 				: 0
 		defender.lastHitAt = hit.landsAt
@@ -441,7 +453,7 @@ export class DuelSim {
 		defender.hp = Math.max(0, defender.hp - damage)
 		const stunScale = Math.max(
 			0,
-			1 - defender.chain * DUEL.hitstunDecayPerHit,
+			1 - defender.chain * this.rules.hitstunDecayPerHit,
 		)
 		defender.hitstunUntil = Math.max(
 			defender.hitstunUntil,
@@ -449,9 +461,10 @@ export class DuelSim {
 		)
 		this.gainMeter(
 			attacker,
-			DUEL.meterOnHit + (hit.perfect ? DUEL.meterOnPerfect : 0),
+			this.rules.meterOnHit +
+				(hit.perfect ? this.rules.meterOnPerfect : 0),
 		)
-		this.gainMeter(defenderSide, DUEL.meterOnTakeHit)
+		this.gainMeter(defenderSide, this.rules.meterOnTakeHit)
 
 		this.emit({
 			t: 'hit',
@@ -472,7 +485,7 @@ export class DuelSim {
 		}
 
 		if (sig.kind === 'drain') {
-			const room = DUEL.maxMeter - attackerState.meter
+			const room = this.rules.maxMeter - attackerState.meter
 			const amount = Math.min(defender.meter, sig.meterPerHit, room)
 			if (amount > 0) {
 				defender.meter -= amount
@@ -523,7 +536,7 @@ export class DuelSim {
 		this.emit({ t: 'roundOver', winner, reason, round: this.round })
 
 		const champion = SIDES.find(
-			(s) => this.fighters[s].roundsWon >= DUEL.roundsToWin,
+			(s) => this.fighters[s].roundsWon >= this.rules.roundsToWin,
 		)
 		if (champion) {
 			this.phase = 'matchOver'
@@ -535,7 +548,7 @@ export class DuelSim {
 
 	private gainMeter(side: Side, amount: number): void {
 		const f = this.fighters[side]
-		f.meter = Math.max(0, Math.min(DUEL.maxMeter, f.meter + amount))
+		f.meter = Math.max(0, Math.min(this.rules.maxMeter, f.meter + amount))
 	}
 
 	private emit(e: DuelEvent): void {

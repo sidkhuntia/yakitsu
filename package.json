@@ -12,6 +12,7 @@
 		"sweep:variants": "tsx scripts/sweep-variants.ts",
 		"sweep:v3": "tsx scripts/sweep-v3.ts",
 		"tune": "tsx scripts/tune-fighters.ts",
+		"calibrate:ladder": "tsx scripts/calibrate-ladder.ts",
 		"test": "vitest run",
 		"test:watch": "vitest",
 		"typecheck": "tsc --noEmit",

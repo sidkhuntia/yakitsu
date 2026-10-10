@@ -11,6 +11,7 @@
  */
 
 import { DuelMatch, type MatchEvent } from './duelMatch'
+import type { DuelLevel } from './duelLevels'
 import { other, type DuelRules, type MoveId, type Side } from './duelTuning'
 import {
 	FIGHTERS,
@@ -463,4 +464,51 @@ export function mirrorRate(
 		pick,
 		extra,
 	)
+}
+
+/**
+ * Seed family the ladder is confirmed on: `pnpm calibrate:ladder` and the
+ * ladder test both read it. The ladder formulas were searched on a different
+ * family, so a passing check is not the search re-run.
+ */
+export const LADDER_CHECK_SEED = 50_000
+
+export interface LadderPoint {
+	/** Share of matches the player won. */
+	rate: number
+	/** Matches decided by the MAX_ROUNDS cap, whose tie-break favours p1. */
+	capped: number
+}
+
+/**
+ * Win rate of a player typing at `playerWpm` against the goblin of `lv`.
+ * The player is a Hero, mixed style, that always parries. The goblin is
+ * `lv.bot` with the level's HP and windup scale. Same seating as the scene
+ * (Hero on p1, goblin on p2), no side swap.
+ */
+export function ladderWinRate(
+	lv: DuelLevel,
+	playerWpm: number,
+	n: number,
+	seedBase: number,
+	pick: WordPicker,
+): LadderPoint {
+	const player = botProfile(playerWpm, 'mixed', { parryChance: 1 })
+	let wins = 0
+	let capped = 0
+	for (let i = 0; i < n; i++) {
+		const r = simulateMatch({
+			a: 'hero',
+			b: 'goblin',
+			profileA: player,
+			profileB: lv.bot,
+			seed: seedBase + i,
+			pick,
+			maxHp: { p2: lv.goblinHp },
+			windupScale: { p2: lv.windupScale },
+		})
+		if (r.winner === 'p1') wins++
+		if (r.capped) capped++
+	}
+	return { rate: wins / n, capped }
 }

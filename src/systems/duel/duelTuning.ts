@@ -17,10 +17,6 @@ export const DUEL = {
 	maxMeter: 100,
 	roundsToWin: 2,
 	roundTimeMs: 75_000,
-	/** Fixed reaction allowance in every goblin telegraph. */
-	windupReactionMs: 380,
-	/** Floor on a telegraph, so 3-letter block words stay readable. */
-	minWindupMs: 850,
 
 	/** Countdown before each round, handled by the scene. */
 	introMs: 1800,
@@ -89,8 +85,6 @@ export const DUEL = {
 	staleFactor: 0.8,
 	/** Lowest multiplier staling can reach. */
 	staleFloor: 0.4,
-	/** Each later round of a match tightens the telegraph by this much. */
-	roundTightening: 0.05,
 } as const
 
 /**

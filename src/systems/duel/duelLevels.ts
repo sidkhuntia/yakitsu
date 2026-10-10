@@ -6,10 +6,15 @@
  * must type to parry, how long the goblin telegraphs its swings, how well the
  * typist bot types and parries, and how much health the goblin has. Beating a
  * level unlocks the next.
+ *
+ * The numbers are calibrated against the symmetric rules, not the old
+ * one-sided ones. The goal per level: a Hero typing at `targetWpm` beats the
+ * goblin 65-80 % of the time, and at 0.75 x `targetWpm` wins at most 35 %.
+ * `pnpm calibrate:ladder` measures this, and the ladder test enforces it on
+ * levels 1, 6 and 12.
  */
 
 import { FIGHTERS, type FighterDef } from './fighters'
-import { DUEL } from './duelTuning'
 import { botProfile, type BotProfile } from './typistBot'
 import { WORD_TIERS } from '../tuning'
 
@@ -49,8 +54,20 @@ const TITLES = [
 
 const lerp = (a: number, b: number, t: number): number => a + (b - a) * t
 
-/** Target WPM at which the goblin has exactly `DUEL.maxHp`. */
-const HP_PER_WPM = 22
+/**
+ * The goblin types at this share of the level's target speed. Below the
+ * target, so a player typing at target is not outpaced by the goblin.
+ */
+const GOBLIN_WPM_SHARE = 0.85
+
+/**
+ * The goblin parries at this rate on every level, held flat on purpose. A
+ * goblin that parries more needs less HP to hold a target-speed player at
+ * 72.5 %. A rising parry curve would therefore make the HP fall toward the top
+ * of the ladder, and the ladder must not get easier as it rises. The difficulty
+ * lives in the HP curve, fitted with this parry rate (see `goblinHp` below).
+ */
+const GOBLIN_PARRY = 0.25
 
 export function clampLevel(level: number): number {
 	if (!Number.isFinite(level)) return 1
@@ -84,8 +101,8 @@ export function requiredWindupScale(
 /**
  * Everything about a level, interpolated from level 1 to `MAX_LEVEL`.
  *
- * Every knob moves in the same direction, so a higher level is never easier
- * in any respect.
+ * Every knob is non-decreasing in difficulty, so a higher level is never
+ * easier in any respect.
  */
 export function duelLevel(level: number): DuelLevel {
 	const n = clampLevel(level)
@@ -98,13 +115,10 @@ export function duelLevel(level: number): DuelLevel {
 		targetWpm,
 		// A "word" is five characters, so ms per char = 60000 / (wpm * 5).
 		msPerChar: 12_000 / targetWpm,
-		// Your damage per second rises with your typing speed, so the goblin's
-		// health has to as well, or a typist just above a level's target
-		// deletes it before parrying ever matters.
-		// The extra ramp keeps top levels from being won well under target.
-		goblinHp: Math.round(
-			((DUEL.maxHp * targetWpm) / HP_PER_WPM) * lerp(1, 1.05, t),
-		),
+		// Searched so a target-speed player wins 72.5 % of matches at each level
+		// (search seeds, n = 600 per point), then fitted with a saturating curve:
+		// the optimum climbs steeply from level 1 and flattens toward the top.
+		goblinHp: Math.round(143.6 + 59.7 * (1 - Math.exp(-3.8 * t))),
 		// Beginners need longer to notice a telegraph and switch words.
 		reactionMs,
 		windupScale: requiredWindupScale(
@@ -113,10 +127,9 @@ export function duelLevel(level: number): DuelLevel {
 			reactionMs,
 		),
 		bot: {
-			// The goblin types slower than the target, so a player typing at the
-			// target speed is not outpaced by it.
-			...botProfile(Math.round(targetWpm * 0.85), 'mixed'),
-			parryChance: lerp(0.25, 0.8, t),
+			...botProfile(Math.round(targetWpm * GOBLIN_WPM_SHARE), 'mixed', {
+				parryChance: GOBLIN_PARRY,
+			}),
 		},
 	}
 }

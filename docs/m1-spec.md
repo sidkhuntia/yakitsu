@@ -239,10 +239,12 @@ export class DuelMatch implements BotHost {
   seven optimiser runs reached 40.3–59.7 % but not 45–55 %: the bots are far
   more consistent than people, which exaggerates matchup gaps. 45–55 % stays
   the target, re-tuned from anonymous live match data after launch.
-- **Dominance check (test):** for every fighter, no style (`turtle`, `heavy`,
-  `jabber`) beats `mixed` in a mirror by more than 60 %. Checking jabber
-  alone was too narrow: the first harness run showed turtle (parry
-  everything) winning every mirror, up to 97 %.
+- **Dominance check (test):** for every fighter, at 40, 70 and 100 WPM,
+  neither one-move style (`jabber`, `heavy`) beats `mixed` in a mirror by
+  more than 55 %. Every bot parries whenever it can, so "turtle" is no
+  longer a separate style worth gating: the first harness run showed
+  parry-everything winning every mirror (up to 97 %), which is why the
+  reference bot now always parries and the rules were changed instead.
 - **Fairness test:** every parryable move passes `parryBudgetOk` with its
   block tier's `maxLen`.
 

@@ -9,6 +9,12 @@ import {
 } from '../duelLevels'
 import { WORD_TIERS } from '../../tuning'
 import { loadData, recordDuel } from '../../persistence'
+import { LADDER_CHECK_SEED, ladderWinRate } from '../balance'
+import { loadWordPicker } from './wordsFixture'
+
+/** Matches per ladder point. Deterministic: fixed seeds. */
+const LADDER_N = 200
+const pick = loadWordPicker()
 
 /** The goblin's parryable moves, each with the length of its block word. */
 const parryable: { move: FighterMove; maxLen: number }[] = Object.values(
@@ -85,6 +91,35 @@ describe('duel levels', () => {
 		expect(clampLevel(99)).toBe(MAX_LEVEL)
 		expect(clampLevel(Number.NaN)).toBe(1)
 	})
+})
+
+describe('duel ladder calibration', () => {
+	// A Hero that always parries, typing at the level's speed, against the
+	// goblin of that level. Measured with `ladderWinRate` on the check seeds.
+	it.each([1, 6, 12])(
+		'level %i: a player at the target speed wins 65-80%, at 0.75x wins at most 35%',
+		(n) => {
+			const lv = duelLevel(n)
+			const at = ladderWinRate(
+				lv,
+				lv.targetWpm,
+				LADDER_N,
+				LADDER_CHECK_SEED,
+				pick,
+			).rate
+			const slow = ladderWinRate(
+				lv,
+				Math.round(lv.targetWpm * 0.75),
+				LADDER_N,
+				LADDER_CHECK_SEED,
+				pick,
+			).rate
+			expect(at).toBeGreaterThanOrEqual(0.65)
+			expect(at).toBeLessThanOrEqual(0.8)
+			expect(slow).toBeLessThanOrEqual(0.35)
+		},
+		30_000,
+	)
 })
 
 describe('duel progress', () => {

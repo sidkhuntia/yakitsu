@@ -55,9 +55,6 @@ export default class Boot extends Phaser.Scene {
 		})
 
 		// --- shared assets ---------------------------------------------------
-		this.load.image('logo', 'assets/placeholder.webp')
-		this.load.image('menuBackground', 'assets/menu_background.webp')
-		this.load.image('gameOverBackground', 'assets/gameover_background.webp')
 
 		loadAudio(this.load)
 

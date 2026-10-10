@@ -319,4 +319,9 @@ requires an impossible typing speed.
 
 ## Licence
 
-MIT — see [LICENSE](./LICENSE). Original art and audio inherit the same licence.
+The code is MIT, see [LICENSE](./LICENSE).
+
+Art, audio and fonts are not MIT. They are CC0 1.0 unless noted, and the
+display font, Press Start 2P, is under the SIL Open Font License 1.1. Every file
+under `public/` is credited in [CREDITS.md](./CREDITS.md) and listed in
+`docs/asset-manifest.json`. `npm run check:assets` fails if one is missing.

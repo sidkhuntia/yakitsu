@@ -235,10 +235,45 @@ export class DuelMatch implements BotHost {
 - `pnpm balance` prints matrices at 40 / 70 / 100 WPM × styles.
 - **Release gate (test):** at 70 WPM, `mixed` vs `mixed`, every pairing of
   different fighters wins 45–55 %. Fixed seeds, runs in < 20 s.
-- **Dominance check (test):** for every fighter, `jabber` vs `mixed` mirror at
-  70 WPM must not exceed 60 %.
+- **Dominance check (test):** for every fighter, no style (`turtle`, `heavy`,
+  `jabber`) beats `mixed` in a mirror by more than 60 %. Checking jabber
+  alone was too narrow: the first harness run showed turtle (parry
+  everything) winning every mirror, up to 97 %.
 - **Fairness test:** every parryable move passes `parryBudgetOk` with its
   block tier's `maxLen`.
+
+### Balance procedure (revised after the first harness run)
+
+The first run showed two problems that number-tuning cannot fix:
+
+1. **A dominant style.** A rewarded parry costs the defender ~3 keystrokes
+   (their word is suspended, not lost) and pays a full cancel, a 1300 ms
+   stagger with ×1.5 counters, and 25 meter. Balancing fighters under
+   `mixed` while `turtle` dominates tunes for a strategy nobody good plays.
+2. **Results flip with WPM** (hero vs goblin: 45 % at 40, 16 % at 70, 66 % at
+   100), so tuning at one speed is undone at the others.
+
+So, in order:
+
+1. **Rules first.** `DUEL` values are now tunable on purpose. `DuelOptions` /
+   `MatchOptions` / `simulateMatch` take `rules?: Partial<DuelRules>`.
+   `pnpm sweep` grid-searches `parryStaggerMs`, `meterOnParry`,
+   `counterMultiplier` on mirrors (each style vs mixed, 40/70/100 WPM).
+   If no setting keeps every style within 40–60 % at every speed, change the
+   rule (candidate: scale the parry reward by the share of windup left when
+   the block completes, so a late block only cancels).
+2. **Then fighter numbers, by script.** A deterministic tuner (not an agent
+   loop) searches per-fighter `maxHp`, heavy and special damage within
+   identity-preserving bounds. Objective: worst |rate − 0.5| over all 10
+   pairings at 40, 70 and 100 WPM, subject to the dominance check. Fixed
+   seeds per candidate; confirm the winner on fresh seeds at larger n.
+3. **Ladder last.** Calibrate goblin HP / windup scale per level with
+   `simulateMatch`'s `maxHp` and `windupScale` once 1–2 are settled.
+
+The CI test gates 70 WPM (runtime); the tuning target covers all three speeds.
+If 45–55 % proves unreachable at 40 or 100 WPM, pull fighter numbers toward
+the hero baseline before considering any change to the threshold, and only
+with the user's agreement.
 
 ## Test ledger — invariants that must survive the rewrite
 

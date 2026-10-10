@@ -7,7 +7,7 @@ import { loadData } from './persistence'
  * design, which is fine for a score readout and actively hostile for a 12-letter
  * word the player has to read under a deadline.
  */
-const DISPLAY_FONT = 'Retro Font'
+const DISPLAY_FONT = 'Press Start 2P'
 
 /**
  * The face used for anything the player has to actually READ as language:

@@ -222,7 +222,7 @@ export default class Play extends Phaser.Scene {
 		this.phase = 'countdown'
 		const label = this.add
 			.text(this.scale.width / 2, this.scale.height * 0.25, '', {
-				fontFamily: 'Retro Font',
+				fontFamily: 'Press Start 2P',
 				fontSize: '72px',
 				color: '#ffffff',
 			})
@@ -513,7 +513,7 @@ export default class Play extends Phaser.Scene {
 	private showBanner(text: string, color: number): void {
 		const b = this.add
 			.text(this.scale.width / 2, this.scale.height - 40, text, {
-				fontFamily: 'Retro Font',
+				fontFamily: 'Press Start 2P',
 				fontSize: '34px',
 				color: `#${color.toString(16).padStart(6, '0')}`,
 				stroke: '#000000',
@@ -545,7 +545,7 @@ export default class Play extends Phaser.Scene {
 	): void {
 		const t = this.add
 			.text(x, y, `+${amount}${perfect ? '  PERFECT' : ''}`, {
-				fontFamily: 'Retro Font',
+				fontFamily: 'Press Start 2P',
 				fontSize: perfect ? '32px' : '24px',
 				color: perfect ? '#00e676' : '#ffd166',
 				stroke: '#000000',

@@ -44,7 +44,7 @@ export class CardView {
 		this.caption = scene.add
 			.text(0, -(style.fontSize / 2 + 26), style.caption, {
 				fontFamily: displayFont(),
-				fontSize: '16px',
+				fontSize: '12px',
 				color: '#' + style.accent.toString(16).padStart(6, '0'),
 			})
 			.setOrigin(0.5)

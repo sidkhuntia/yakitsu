@@ -139,7 +139,7 @@ export class SettingsModal extends Phaser.GameObjects.Container {
 
 		const title = scene.add
 			.text(cx, top + 40, 'PAUSED', {
-				fontFamily: 'Retro Font',
+				fontFamily: 'Press Start 2P',
 				fontSize: '30px',
 				color: '#ffffff',
 			})
@@ -151,7 +151,7 @@ export class SettingsModal extends Phaser.GameObjects.Container {
 			const y = startY + i * ROW_H
 			const btn = scene.add
 				.text(cx, y, row.label(), {
-					fontFamily: 'Retro Font',
+					fontFamily: 'Press Start 2P',
 					fontSize: '18px',
 					color: '#e6f1ff',
 					backgroundColor: '#141d2b',
@@ -179,7 +179,7 @@ export class SettingsModal extends Phaser.GameObjects.Container {
 				rowsBottom + 30,
 				'Lower Assist gives you more time per word',
 				{
-					fontFamily: 'Retro Font',
+					fontFamily: 'Press Start 2P',
 					fontSize: '13px',
 					color: '#7f8fa6',
 				},
@@ -194,7 +194,7 @@ export class SettingsModal extends Phaser.GameObjects.Container {
 		): Phaser.GameObjects.Text => {
 			const t = scene.add
 				.text(cx, y, label, {
-					fontFamily: 'Retro Font',
+					fontFamily: 'Press Start 2P',
 					fontSize: '19px',
 					color: '#08131f',
 					backgroundColor: `#${color.toString(16).padStart(6, '0')}`,
@@ -229,7 +229,7 @@ export class SettingsModal extends Phaser.GameObjects.Container {
 		// Clear save, tucked into the corner so it can't be hit by accident.
 		const clear = scene.add
 			.text(cx - PANEL_W / 2 + 18, top + PANEL_H - 16, 'reset data', {
-				fontFamily: 'Retro Font',
+				fontFamily: 'Press Start 2P',
 				fontSize: '13px',
 				color: '#ff5252',
 			})

@@ -72,7 +72,7 @@ export class Hud {
 		private readonly difficulty: DifficultyProfile,
 	) {
 		const font = (size: number, color: string) => ({
-			fontFamily: 'Retro Font',
+			fontFamily: 'Press Start 2P',
 			fontSize: `${size}px`,
 			color,
 		})

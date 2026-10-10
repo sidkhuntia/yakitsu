@@ -50,10 +50,10 @@ const PLAYER_FEET_PX = 24
 const GOBLIN_FEET_PX = 26
 
 const CARD_STYLE: Record<Slot, { accent: number; fontSize: number }> = {
-	jab: { accent: 0x64ffda, fontSize: 30 },
-	heavy: { accent: 0xffb300, fontSize: 30 },
-	special: { accent: 0xffd600, fontSize: 30 },
-	block: { accent: 0xff5252, fontSize: 44 },
+	jab: { accent: 0x64ffda, fontSize: 26 },
+	heavy: { accent: 0xffb300, fontSize: 26 },
+	special: { accent: 0xffd600, fontSize: 26 },
+	block: { accent: 0xff5252, fontSize: 36 },
 }
 
 /**
@@ -204,7 +204,7 @@ export default class Duel extends Phaser.Scene {
 				'Type a card to attack · type the RED word to parry (your word waits) · Backspace to cancel',
 				{
 					fontFamily: displayFont(),
-					fontSize: '16px',
+					fontSize: '12px',
 					color: '#8fa3bd',
 				},
 			)

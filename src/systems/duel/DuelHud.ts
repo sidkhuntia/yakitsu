@@ -61,7 +61,7 @@ export class DuelHud {
 		this.sub = scene.add
 			.text(width / 2, scene.scale.height * 0.4 + 76, '', {
 				fontFamily: displayFont(),
-				fontSize: '26px',
+				fontSize: '22px',
 				color: '#e0e6f0',
 				stroke: '#000000',
 				strokeThickness: 5,

@@ -1,5 +1,6 @@
 import Phaser from 'phaser'
 import { loadAudio } from '../systems/sfx'
+import { displayFont } from '../systems/font'
 import { loadBackdrop } from '../systems/backdrop'
 
 /**
@@ -34,7 +35,7 @@ export default class Boot extends Phaser.Scene {
 
 		this.add
 			.text(barX, barY - 60, 'YAKITSKU', {
-				fontFamily: 'Retro Font',
+				fontFamily: displayFont(),
 				fontSize: '52px',
 				color: '#ffb347',
 			})
@@ -42,7 +43,7 @@ export default class Boot extends Phaser.Scene {
 
 		this.label = this.add
 			.text(barX, barY + 40, 'LOADING 0%', {
-				fontFamily: 'Retro Font',
+				fontFamily: displayFont(),
 				fontSize: '16px',
 				color: '#7f8fa6',
 			})

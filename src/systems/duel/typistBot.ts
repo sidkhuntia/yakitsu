@@ -81,8 +81,15 @@ const WPM_CEIL = 110
  *
  * Linear is deliberate: it keeps the curve easy to reason about when the
  * balance harness sweeps WPM.
+ *
+ * `overrides` are merged last, so a caller can pin one knob (for example
+ * `parryChance`) without changing the curve or the style.
  */
-export function botProfile(wpm: number, style: BotStyle = 'mixed'): BotProfile {
+export function botProfile(
+	wpm: number,
+	style: BotStyle = 'mixed',
+	overrides?: Partial<BotProfile>,
+): BotProfile {
 	const t = Math.min(
 		1,
 		Math.max(0, (wpm - WPM_FLOOR) / (WPM_CEIL - WPM_FLOOR)),
@@ -95,6 +102,7 @@ export function botProfile(wpm: number, style: BotStyle = 'mixed'): BotProfile {
 		parryChance,
 		moveWeights: { ...moves },
 		jitter: 0.25,
+		...overrides,
 	}
 }
 

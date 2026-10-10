@@ -163,6 +163,14 @@ describe('botProfile', () => {
 			botProfile(70, 'jabber').parryChance,
 		)
 	})
+
+	it('overrides are merged last and leave the rest of the profile alone', () => {
+		const base = botProfile(70, 'mixed')
+		const pinned = botProfile(70, 'mixed', { parryChance: 1 })
+		expect(pinned.parryChance).toBe(1)
+		expect({ ...pinned, parryChance: base.parryChance }).toEqual(base)
+		expect(botProfile(70, 'mixed', {})).toEqual(base)
+	})
 })
 
 describe('TypistBot', () => {

@@ -561,6 +561,74 @@ describe('DuelSim: granularity invariance', () => {
 	})
 })
 
+describe('DuelSim: blockDamageShare', () => {
+	it('a successful parry still deals the share of base damage', () => {
+		const s = sim(HERO, HERO, { rules: { blockDamageShare: 0.4 } })
+		s.attack('p2', 'heavy', false, 0) // base damage 13
+		expect(s.parry('p1', false, 500)).toBe(true)
+		expect(s.fighters.p1.hp).toBe(HERO.maxHp - 5) // round(13 * 0.4)
+		expect(s.isStaggered('p2', 900)).toBe(true)
+		expect(s.fighters.p1.meter).toBe(DUEL.meterOnParry)
+		expect(s.drain()).toContainEqual(
+			expect.objectContaining({
+				t: 'parried',
+				rewarded: true,
+				chip: 5,
+			}),
+		)
+	})
+
+	it('uses base damage only, so the perfect multiplier does not apply', () => {
+		const s = sim(HERO, HERO, { rules: { blockDamageShare: 0.4 } })
+		s.attack('p2', 'heavy', true, 0) // perfect would make it 15.6
+		s.parry('p1', false, 500)
+		expect(s.fighters.p1.hp).toBe(HERO.maxHp - 5)
+	})
+
+	it('adds to the passive chip', () => {
+		const s = sim(HERO, HERO, { rules: { blockDamageShare: 0.4 } })
+		// p1 is passive: passive chip 5 plus block chip 5.
+		s.attack('p2', 'heavy', false, 10_500) // lands 11600
+		expect(s.parry('p1', false, 11_000)).toBe(true)
+		expect(s.fighters.p1.hp).toBe(HERO.maxHp - 10)
+		expect(s.drain()).toContainEqual(
+			expect.objectContaining({
+				t: 'parried',
+				rewarded: false,
+				chip: 10,
+			}),
+		)
+	})
+
+	it('a block chip can knock the defender out', () => {
+		const s = sim(HERO, HERO, {
+			maxHp: { p1: 5 },
+			rules: { blockDamageShare: 0.4 },
+		})
+		s.attack('p2', 'heavy', false, 0)
+		s.parry('p1', false, 500)
+		expect(s.fighters.p1.hp).toBe(0)
+		expect(s.phase).toBe('roundOver')
+		expect(s.drain()).toContainEqual(
+			expect.objectContaining({
+				t: 'roundOver',
+				winner: 'p2',
+				reason: 'ko',
+			}),
+		)
+	})
+
+	it('0 (default) leaves a successful parry at no damage', () => {
+		const s = sim()
+		s.attack('p2', 'heavy', false, 0)
+		s.parry('p1', false, 500)
+		expect(s.fighters.p1.hp).toBe(HERO.maxHp)
+		expect(s.drain()).toContainEqual(
+			expect.objectContaining({ t: 'parried', chip: 0 }),
+		)
+	})
+})
+
 describe('DuelSim: rules', () => {
 	it('uses DUEL unless a rule is overridden', () => {
 		const s = new DuelSim({ fighters: { p1: HERO, p2: HERO } })
@@ -581,5 +649,138 @@ describe('DuelSim: rules', () => {
 		s.parry('p1', false, 500)
 		expect(s.canAct('p2', 999)).toBe(false)
 		expect(s.canAct('p2', 1000)).toBe(true)
+	})
+})
+
+describe('DuelSim: move staling', () => {
+	/** Rounded to 3 places, so 0.7 * 0.7 compares equal to 0.49. */
+	const stalesOf = (events: DuelEvent[]) =>
+		attacksStarted(events).map((e) => Number(e.stale.toFixed(3)))
+
+	it('is off by default: every repeat deals full damage', () => {
+		expect(DUEL.staleFactor).toBe(1)
+		const s = sim()
+		s.attack('p1', 'jab', false, 0)
+		s.attack('p1', 'jab', false, 300)
+		s.attack('p1', 'jab', false, 600)
+		s.advance(900)
+		const events = s.drain()
+		expect(stalesOf(events)).toEqual([1, 1, 1])
+		expect(hitDamages(events)).toEqual([4, 4, 4])
+	})
+
+	it('the second repeat deals 0.7x, the third 0.49x', () => {
+		const s = sim(HERO, HERO, { rules: { staleFactor: 0.7 } })
+		s.attack('p1', 'jab', false, 0)
+		s.attack('p1', 'jab', false, 300)
+		s.attack('p1', 'jab', false, 600)
+		s.advance(900)
+		const events = s.drain()
+		expect(stalesOf(events)).toEqual([1, 0.7, 0.49])
+		// round(4 * 0.7) = 3, round(4 * 0.49) = 2
+		expect(hitDamages(events)).toEqual([4, 3, 2])
+		expect(
+			events.flatMap((e) =>
+				e.t === 'hit' ? [Number(e.stale.toFixed(3))] : [],
+			),
+		).toEqual([1, 0.7, 0.49])
+	})
+
+	it('never goes below staleFloor', () => {
+		const s = sim(HERO, HERO, { rules: { staleFactor: 0.5 } })
+		s.attack('p1', 'jab', false, 0)
+		s.attack('p1', 'jab', false, 300)
+		s.attack('p1', 'jab', false, 600)
+		s.attack('p1', 'jab', false, 900)
+		s.advance(1500)
+		const events = s.drain()
+		// 0.5^2 = 0.25 and 0.5^3 = 0.125 are both under the 0.4 floor.
+		expect(stalesOf(events)).toEqual([1, 0.5, 0.4, 0.4])
+		// round(4 * 0.4) = 2, so the floor keeps the repeats at 2 damage.
+		expect(hitDamages(events)).toEqual([4, 2, 2, 2])
+	})
+
+	it('a different move in between resets the count', () => {
+		const s = sim(HERO, HERO, { rules: { staleFactor: 0.7 } })
+		expect(s.attack('p1', 'jab', false, 0)).toBe(true)
+		expect(s.attack('p1', 'heavy', false, 300)).toBe(true)
+		expect(s.attack('p1', 'jab', false, 1400)).toBe(true)
+		expect(s.attack('p1', 'jab', false, 1700)).toBe(true)
+		s.advance(2100)
+		expect(stalesOf(s.drain())).toEqual([1, 1, 1, 0.7])
+	})
+
+	it('a refused attack does not count as a repeat', () => {
+		const s = sim(HERO, HERO, { rules: { staleFactor: 0.7 } })
+		expect(s.attack('p1', 'jab', false, 0)).toBe(true)
+		expect(s.attack('p1', 'jab', false, 100)).toBe(false) // still in flight
+		expect(s.attack('p1', 'jab', false, 300)).toBe(true)
+		s.advance(600)
+		expect(stalesOf(s.drain())).toEqual([1, 0.7])
+	})
+
+	it('resets each round', () => {
+		const s = sim(HERO, HERO, {
+			maxHp: { p2: 5 },
+			rules: { staleFactor: 0.7 },
+		})
+		s.attack('p1', 'jab', false, 0)
+		s.attack('p1', 'jab', false, 300) // 4 + 3 KOs a 5 HP defender at 600
+		s.advance(600)
+		expect(s.phase).toBe('roundOver')
+		s.startRound(1000)
+		s.attack('p1', 'jab', false, 1000)
+		s.advance(1300)
+		expect(stalesOf(s.drain())).toEqual([1, 0.7, 1])
+	})
+
+	it('reports stale on attackStarted and hit', () => {
+		const s = sim(HERO, HERO, { rules: { staleFactor: 0.7 } })
+		s.attack('p1', 'jab', false, 0)
+		s.attack('p1', 'jab', false, 300)
+		s.advance(600)
+		const events = s.drain()
+		expect(events).toContainEqual(
+			expect.objectContaining({ t: 'attackStarted', stale: 1 }),
+		)
+		expect(events).toContainEqual(
+			expect.objectContaining({ t: 'hit', damage: 3, stale: 0.7 }),
+		)
+	})
+
+	/** Same ops at a chosen advance granularity (null: only at each op). */
+	function staledRun(step: number | null) {
+		const s = sim(HERO, HERO, { rules: { staleFactor: 0.7 } })
+		const ops: [number, MoveId][] = [
+			[0, 'jab'],
+			[300, 'jab'],
+			[600, 'jab'],
+			[900, 'heavy'],
+			[2200, 'jab'],
+			[2500, 'jab'],
+		]
+		let now = 0
+		for (const [at, move] of ops) {
+			if (step !== null)
+				for (let t = now; t <= at; t += step) s.advance(t)
+			s.advance(at)
+			s.attack('p1', move, false, at)
+			now = at
+		}
+		s.advance(3000)
+		return {
+			events: s.drain(),
+			hp: [s.fighters.p1.hp, s.fighters.p2.hp],
+		}
+	}
+
+	it('stays granularity-invariant with staling on', () => {
+		const coarse = staledRun(null)
+		expect(coarse.events.some((e) => e.t === 'hit' && e.stale < 1)).toBe(
+			true,
+		)
+		expect(staledRun(1).events).toEqual(coarse.events)
+		expect(staledRun(16).events).toEqual(coarse.events)
+		expect(staledRun(1).hp).toEqual(coarse.hp)
 	})
 })

@@ -191,6 +191,79 @@ describe('DuelMatch: blocks and parries', () => {
 	})
 })
 
+describe('DuelMatch: parryResetsWord', () => {
+	it('with parryResetsWord 1 both decks reset the attack word you leave to block', () => {
+		const m = new DuelMatch({
+			seed: 5,
+			fighters: { p1: HERO, p2: HERO },
+			pick,
+			rules: { parryResetsWord: 1 },
+		})
+		m.startRound(0)
+		m.drain()
+
+		// p2 is partway through its jab when p1's heavy lands in its window.
+		const p2Jab = m.decks.p2.card('jab')!.word
+		m.key('p2', p2Jab[0], 0)
+		m.key('p2', p2Jab[1], 100)
+		expect(m.decks.p2.card('jab')!.engine.getCaret()).toBe(2)
+
+		const doneAt = typeWord(m, 'p1', m.decks.p1.card('heavy')!.word, 1000)
+		const offer = m.blockOffer('p2')!
+		expect(m.key('p2', offer.word[0], doneAt + 200)).toEqual({
+			kind: 'progress',
+			slot: 'block',
+		})
+		expect(m.decks.p2.card('jab')!.engine.getCaret()).toBe(0)
+		expect(m.decks.p2.suspended).toBeNull()
+		typeWord(m, 'p2', offer.word.slice(1), doneAt + 300)
+		expect(findEvent(m.drain(), 'parried')).toMatchObject({
+			defender: 'p2',
+			rewarded: true,
+		})
+		expect(m.decks.p2.active).toBeNull()
+		expect(m.decks.p2.card('jab')!.engine.getCaret()).toBe(0)
+
+		// Now the other way round: p2's heavy comes in while p1 is partway
+		// through its jab. p2 is staggered until its own parry plus 1300 ms.
+		const p1Jab = m.decks.p1.card('jab')!.word
+		m.key('p1', p1Jab[0], 3000)
+		m.key('p1', p1Jab[1], 3100)
+		typeWord(m, 'p2', m.decks.p2.card('heavy')!.word, 3200)
+		const offer2 = m.blockOffer('p1')!
+		expect(m.key('p1', offer2.word[0], offer2.offeredAt + 100)).toEqual({
+			kind: 'progress',
+			slot: 'block',
+		})
+		expect(m.decks.p1.card('jab')!.engine.getCaret()).toBe(0)
+		expect(m.decks.p1.suspended).toBeNull()
+		typeWord(m, 'p1', offer2.word.slice(1), offer2.offeredAt + 200)
+		expect(findEvent(m.drain(), 'parried')).toMatchObject({
+			defender: 'p1',
+			rewarded: true,
+		})
+		expect(m.decks.p1.active).toBeNull()
+	})
+
+	it('by default the attack word you leave is parked and resumes after the block', () => {
+		const m = newMatch()
+		m.startRound(0)
+		m.drain()
+
+		const p2Jab = m.decks.p2.card('jab')!.word
+		m.key('p2', p2Jab[0], 0)
+		m.key('p2', p2Jab[1], 100)
+		const doneAt = typeWord(m, 'p1', m.decks.p1.card('heavy')!.word, 1000)
+		const offer = m.blockOffer('p2')!
+		m.key('p2', offer.word[0], doneAt + 200)
+		expect(m.decks.p2.suspended).toBe('jab')
+
+		typeWord(m, 'p2', offer.word.slice(1), doneAt + 300)
+		expect(m.decks.p2.active).toBe('jab')
+		expect(m.decks.p2.card('jab')!.engine.getCaret()).toBe(2)
+	})
+})
+
 describe('DuelMatch: buffering', () => {
 	it('a word finished in hitstun starts exactly at readyAt, however late advance is called', () => {
 		const m = newMatch()

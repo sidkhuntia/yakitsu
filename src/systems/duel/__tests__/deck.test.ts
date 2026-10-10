@@ -160,6 +160,62 @@ describe('PlayerDeck', () => {
 	})
 })
 
+describe('PlayerDeck suspendOnBlock', () => {
+	/** Heavy typed to "HA", then the block word's first letter. */
+	function blockSwitch(suspendOnBlock?: boolean) {
+		const deck = new PlayerDeck(
+			pickerFrom(WORDS),
+			1,
+			FIGHTERS.hero,
+			suspendOnBlock === undefined ? {} : { suspendOnBlock },
+		)
+		deck.key('H', 0)
+		deck.key('A', 0)
+		const block = deck.offerBlock(1)
+		expect(deck.key(block[0], 0)).toEqual({
+			kind: 'progress',
+			slot: 'block',
+		})
+		return { deck, block }
+	}
+
+	it('default (true) parks the attack word and resumes it after the block', () => {
+		const { deck, block } = blockSwitch()
+		expect(deck.suspended).toBe('heavy')
+		for (const ch of block.slice(1)) deck.key(ch, 0)
+		expect(deck.active).toBe('heavy')
+		expect(deck.card('heavy')!.engine.getCaret()).toBe(2)
+	})
+
+	it('false: the switch to block resets the attack word you leave', () => {
+		const { deck } = blockSwitch(false)
+		expect(deck.active).toBe('block')
+		expect(deck.suspended).toBeNull()
+		expect(deck.card('heavy')!.engine.getCaret()).toBe(0)
+	})
+
+	it('false: nothing resumes when the block is parried', () => {
+		const { deck, block } = blockSwitch(false)
+		for (const ch of block.slice(1)) deck.key(ch, 0)
+		expect(deck.active).toBeNull()
+		expect(deck.card('heavy')!.engine.getCaret()).toBe(0)
+	})
+
+	it('false: nothing resumes when the attack lands and clears the block', () => {
+		const { deck } = blockSwitch(false)
+		deck.clearBlock()
+		expect(deck.active).toBeNull()
+		expect(deck.card('heavy')!.engine.getCaret()).toBe(0)
+	})
+
+	it('false: nothing resumes when the block is backed out of', () => {
+		const { deck } = blockSwitch(false)
+		deck.backspace()
+		expect(deck.active).toBeNull()
+		expect(deck.card('heavy')!.engine.getCaret()).toBe(0)
+	})
+})
+
 describe('seeded decks', () => {
 	const bank = new WordBank({
 		three: ['CAT', 'COW', 'BIG', 'ASK', 'DOG', 'EGG', 'FOX', 'HAT', 'ICE'],

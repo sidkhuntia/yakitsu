@@ -51,6 +51,29 @@ export const DUEL = {
 	passiveMs: 10_000,
 	/** Share of a parried attack's damage a passive fighter still takes. */
 	passiveChip: 0.4,
+	/**
+	 * Rule variant. 0 (default): switching from a clean attack word to the
+	 * block word suspends the attack and it resumes after the block. 1: the
+	 * switch resets the attack word instead, so a parry costs its progress and
+	 * nothing resumes.
+	 */
+	parryResetsWord: 0,
+	/**
+	 * Rule variant. Share of a parried attack's base damage the defender takes
+	 * even when the parry succeeds. 0 (default): a successful parry deals no
+	 * damage. Stacks on top of any passive chip. A non-zero share can KO.
+	 */
+	blockDamageShare: 0,
+	/**
+	 * Move staling, as in Smash Bros. Each consecutive successful use of the
+	 * same move multiplies that attack's base damage by `staleFactor` once
+	 * more: with 0.7 the second repeat deals 0.7x, the third 0.49x. A
+	 * different move in between, or a new round, resets the count. 1 (default)
+	 * turns staling off.
+	 */
+	staleFactor: 1,
+	/** Lowest multiplier staling can reach. */
+	staleFloor: 0.4,
 	/** Each later round of a match tightens the telegraph by this much. */
 	roundTightening: 0.05,
 } as const

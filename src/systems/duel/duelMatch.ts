@@ -15,7 +15,13 @@
 
 import { DuelSim, type DuelEvent } from './duelSim'
 import type { FighterDef } from './fighters'
-import { other, type DuelRules, type MoveId, type Side } from './duelTuning'
+import {
+	DUEL,
+	other,
+	type DuelRules,
+	type MoveId,
+	type Side,
+} from './duelTuning'
 import { PlayerDeck, type KeyResult, type WordPicker } from './playerDeck'
 import type { BotHost, TypistBot } from './typistBot'
 
@@ -79,9 +85,21 @@ export class DuelMatch implements BotHost {
 			windupScale: options.windupScale,
 			rules: options.rules,
 		})
+		const rules: DuelRules = { ...DUEL, ...options.rules }
+		const deckOptions = { suspendOnBlock: rules.parryResetsWord === 0 }
 		this.decks = {
-			p1: new PlayerDeck(options.pick, options.seed, options.fighters.p1),
-			p2: new PlayerDeck(options.pick, options.seed, options.fighters.p2),
+			p1: new PlayerDeck(
+				options.pick,
+				options.seed,
+				options.fighters.p1,
+				deckOptions,
+			),
+			p2: new PlayerDeck(
+				options.pick,
+				options.seed,
+				options.fighters.p2,
+				deckOptions,
+			),
 		}
 	}
 

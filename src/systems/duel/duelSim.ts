@@ -36,6 +36,15 @@ interface PendingAttack {
 	interrupts: boolean
 	blockTier: number | null
 	hitstunMs: number
+	/** Move-staling multiplier on base damage, 1 when unstaled. */
+	stale: number
+}
+
+/** Consecutive-use tracking for move staling, kept per side. */
+interface Streak {
+	lastMove: MoveId | null
+	/** Repeats of `lastMove` in a row: 0 for the first use. */
+	staleCount: number
 }
 
 export interface PoisonState {
@@ -76,6 +85,8 @@ export type DuelEvent =
 			/** Tier of the block word the defender must type, or null. */
 			blockTier: number | null
 			armored: boolean
+			/** Staling multiplier this attack will land with. */
+			stale: number
 	  }
 	| {
 			t: 'hit'
@@ -84,6 +95,8 @@ export type DuelEvent =
 			damage: number
 			counter: boolean
 			perfect: boolean
+			/** Staling multiplier applied to the base damage. */
+			stale: number
 	  }
 	| {
 			t: 'parried'
@@ -92,7 +105,10 @@ export type DuelEvent =
 			perfect: boolean
 			/** False for a passive defender: no stagger, no meter. */
 			rewarded: boolean
-			/** HP the defender lost anyway, from being passive. */
+			/**
+			 * Total HP the defender lost on this parry: passive chip plus any
+			 * `blockDamageShare` damage. Zero under the default rules.
+			 */
 			chip: number
 	  }
 	| { t: 'interrupted'; side: Side; move: MoveId }
@@ -177,6 +193,10 @@ export class DuelSim {
 	round = 0
 	private roundEndsAt = 0
 	private events: DuelEvent[] = []
+	private streaks: Record<Side, Streak> = {
+		p1: { lastMove: null, staleCount: 0 },
+		p2: { lastMove: null, staleCount: 0 },
+	}
 
 	/** Begin the next round. Meter carries over; HP and state do not. */
 	startRound(now: number): void {
@@ -185,6 +205,7 @@ export class DuelSim {
 		if (this.phase === 'matchOver') return
 		this.round++
 		for (const side of SIDES) {
+			this.streaks[side] = { lastMove: null, staleCount: 0 }
 			const prev = this.fighters[side]
 			this.fighters[side] = {
 				...freshFighter(prev.maxHp, prev.roundsWon),
@@ -256,6 +277,14 @@ export class DuelSim {
 		f.meter -= def.meterCost
 		f.lastAttackAt = now
 
+		const streak = this.streaks[side]
+		streak.staleCount = streak.lastMove === move ? streak.staleCount + 1 : 0
+		streak.lastMove = move
+		const stale = Math.max(
+			this.rules.staleFloor,
+			this.rules.staleFactor ** streak.staleCount,
+		)
+
 		const defenderSig = this.defs[other(side)].signature
 		const guardScale =
 			defenderSig.kind === 'guard' ? defenderSig.incomingWindupScale : 1
@@ -273,6 +302,7 @@ export class DuelSim {
 			interrupts: def.interrupts,
 			blockTier: def.blockTier,
 			hitstunMs: def.hitstunMs,
+			stale,
 		}
 		f.pending = pending
 		this.emit({
@@ -282,6 +312,7 @@ export class DuelSim {
 			landsAt: pending.landsAt,
 			blockTier: pending.blockTier,
 			armored: pending.armored,
+			stale,
 		})
 		return true
 	}
@@ -292,7 +323,8 @@ export class DuelSim {
 	 * Succeeds only while an attack is in flight whose `blockTier` is not
 	 * null, so jabs cannot be parried. A successful parry cancels the attack
 	 * and opens the attacker up for a counter. A passive defender's parry only
-	 * deflects: no stagger, no meter, but chip damage.
+	 * deflects: no stagger, no meter, but chip damage. Any parry also deals
+	 * `blockDamageShare` of the attack's base damage to the defender.
 	 */
 	parry(side: Side, perfect: boolean, now: number): boolean {
 		this.advance(now)
@@ -312,9 +344,15 @@ export class DuelSim {
 					(perfect ? this.rules.meterOnPerfect : 0),
 			)
 		}
-		const chip = passive
+		const passiveChip = passive
 			? Math.max(1, Math.round(incoming.damage * this.rules.passiveChip))
 			: 0
+		// Base damage only: no perfect, counter or signature multipliers.
+		const blockChip = Math.max(
+			0,
+			Math.round(incoming.damage * this.rules.blockDamageShare),
+		)
+		const chip = passiveChip + blockChip
 		const defender = this.fighters[side]
 		defender.hp = Math.max(0, defender.hp - chip)
 		this.emit({
@@ -419,8 +457,9 @@ export class DuelSim {
 	}
 
 	/**
-	 * Damage order: base, x perfect, x counter, x resolve (attacker below its
-	 * threshold), + combo (attacker, from the defender's chain), then round.
+	 * Damage order: base, x staling, x perfect, x counter, x resolve (attacker
+	 * below its threshold), + combo (attacker, from the defender's chain), then
+	 * round.
 	 */
 	private land(attacker: Side, hit: PendingAttack): void {
 		const defenderSide = other(attacker)
@@ -429,7 +468,7 @@ export class DuelSim {
 		const sig = this.defs[attacker].signature
 		const counter = hit.landsAt < defender.staggerUntil
 
-		let damage = hit.damage
+		let damage = hit.damage * hit.stale
 		if (hit.perfect) damage *= this.rules.perfectMultiplier
 		if (counter) damage *= this.rules.counterMultiplier
 		if (
@@ -473,6 +512,7 @@ export class DuelSim {
 			damage,
 			counter,
 			perfect: hit.perfect,
+			stale: hit.stale,
 		})
 
 		if (sig.kind === 'poison' && hit.move === sig.move) {

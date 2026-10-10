@@ -68,11 +68,15 @@ export class PlayerDeck {
 	 *   neither player can be luckier with their words.
 	 * @param fighter  supplies each attack card's word tier and the special's
 	 *   meter cost
+	 * @param options.suspendOnBlock  default true: switching from an attack
+	 *   word to the block word parks the attack word. False: the switch resets
+	 *   the attack word you leave, and nothing is parked.
 	 */
 	constructor(
 		private readonly pick: WordPicker,
 		readonly seed: number,
 		readonly fighter: FighterDef,
+		private readonly options: { suspendOnBlock?: boolean } = {},
 	) {
 		for (const slot of MOVE_SLOTS)
 			this.deal(slot, this.fighter.moves[slot].tier)
@@ -80,6 +84,10 @@ export class PlayerDeck {
 
 	get active(): Slot | null {
 		return this.activeSlot
+	}
+
+	private get suspendOnBlock(): boolean {
+		return this.options.suspendOnBlock ?? true
 	}
 
 	card(slot: Slot): Card | undefined {
@@ -105,11 +113,12 @@ export class PlayerDeck {
 			if (!active.engine.hasErrors()) {
 				const target = this.cardStartingWith(c, active.slot)
 				if (target && this.isUnlocked(target.slot, meter)) {
-					if (target.slot === 'block') {
+					if (target.slot === 'block' && this.suspendOnBlock) {
 						this.suspendedSlot = active.slot
 					} else {
-						// Changing attacks is a commitment: both the card you
-						// leave and anything parked behind the block start over.
+						// Changing attacks, or switching to a block when blocks do
+						// not suspend, is a commitment: the card you leave and
+						// anything parked behind it start over.
 						this.resetCard(active)
 						this.dropSuspended()
 					}

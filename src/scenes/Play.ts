@@ -8,6 +8,12 @@ import { WordDisplay } from '../systems/WordDisplay'
 import { Monster, MONSTER_TYPES, type MonsterType } from '../systems/Monster'
 import { bodyFont, displayFont } from '../systems/font'
 import { SettingsModal } from '../systems/SettingsModal'
+import { MUSIC, SFX } from '../systems/sfx'
+import {
+	addBackdropShade,
+	BACKDROP_LAYERS,
+	BACKDROP_SCALE,
+} from '../systems/backdrop'
 import { GameOverModal, type GameOverSummary } from '../systems/GameOverModal'
 import {
 	claimMilestone,
@@ -38,8 +44,6 @@ const MILESTONES = [10, 25, 50, 100, 150, 200, 250, 300, 400, 500]
 const MAX_CORPSES = 3
 
 const AVATAR_FRAME = 180
-/** Parallax layers, far to near. */
-const BG_LAYERS = [11, 8, 5, 3, 2]
 
 function overlaps(a: Box, b: Box): boolean {
 	return (
@@ -91,8 +95,11 @@ export default class Play extends Phaser.Scene {
 	/** How many words into the run we are still showing hints. */
 	private static readonly HINT_WORDS = 3
 
-	private backgroundLayers: Phaser.GameObjects.TileSprite[] = []
-	private groundLayers: Phaser.GameObjects.TileSprite[] = []
+	/** Backdrop layers, far to near, each with how far it moves per travel. */
+	private backdrop: {
+		sprite: Phaser.GameObjects.TileSprite
+		scroll: number
+	}[] = []
 
 	/**
 	 * `sound.add` hands back NoAudioSound / HTML5AudioSound / WebAudioSound
@@ -101,7 +108,6 @@ export default class Play extends Phaser.Scene {
 	 * these guards, so the game degrades to silence instead of throwing.
 	 */
 	private bgMusic?: Phaser.Sound.BaseSound
-	private runLoop?: Phaser.Sound.BaseSound
 	private sfx: Record<string, Phaser.Sound.BaseSound> = {}
 
 	constructor() {
@@ -111,20 +117,9 @@ export default class Play extends Phaser.Scene {
 	// ------------------------------------------------------------------ assets
 
 	preload(): void {
-		this.load.image('ice', 'assets/ice.png')
-		this.load.image('bomb', 'assets/bomb.png')
 		this.load.script('words', 'data/words/words.js')
 
-		// The old build drew 14 full-screen layers every frame. Five is visually
-		// equivalent and roughly a third of the fill cost.
-		for (const n of BG_LAYERS) {
-			this.load.image(
-				`layer_${String(n).padStart(4, '0')}`,
-				`assets/background/Layer_${String(n).padStart(4, '0')}.png`,
-			)
-		}
-		this.load.image('ground_back', 'assets/background/Layer_0001.png')
-		this.load.image('ground_front', 'assets/background/Layer_0000.png')
+		// The backdrop layers are queued by Boot (see systems/backdrop.ts).
 
 		this.load.spritesheet('avatar_run', 'assets/character/Run.png', {
 			frameWidth: AVATAR_FRAME,
@@ -229,7 +224,7 @@ export default class Play extends Phaser.Scene {
 		this.phase = 'countdown'
 		const label = this.add
 			.text(this.scale.width / 2, this.scale.height * 0.25, '', {
-				fontFamily: 'Retro Font',
+				fontFamily: displayFont(),
 				fontSize: '72px',
 				color: '#ffffff',
 			})
@@ -520,7 +515,7 @@ export default class Play extends Phaser.Scene {
 	private showBanner(text: string, color: number): void {
 		const b = this.add
 			.text(this.scale.width / 2, this.scale.height - 40, text, {
-				fontFamily: 'Retro Font',
+				fontFamily: displayFont(),
 				fontSize: '34px',
 				color: `#${color.toString(16).padStart(6, '0')}`,
 				stroke: '#000000',
@@ -552,7 +547,7 @@ export default class Play extends Phaser.Scene {
 	): void {
 		const t = this.add
 			.text(x, y, `+${amount}${perfect ? '  PERFECT' : ''}`, {
-				fontFamily: 'Retro Font',
+				fontFamily: displayFont(),
 				fontSize: perfect ? '32px' : '24px',
 				color: perfect ? '#00e676' : '#ffd166',
 				stroke: '#000000',
@@ -847,13 +842,10 @@ export default class Play extends Phaser.Scene {
 	 */
 	private scrollWorld(dt: number): void {
 		this.scrollX += this.monsterSpeed * dt
-		for (let i = 0; i < this.backgroundLayers.length; i++) {
-			// Index 0 is the most distant layer, so it scrolls slowest.
-			this.backgroundLayers[i].tilePositionX =
-				this.scrollX * (0.06 + i * 0.07)
-		}
-		for (let i = 0; i < this.groundLayers.length; i++) {
-			this.groundLayers[i].tilePositionX = this.scrollX * (1.0 + i * 0.25)
+		// tilePositionX counts texture pixels, and each tile is drawn at
+		// BACKDROP_SCALE, so divide by it to keep the on-screen travel exact.
+		for (const { sprite, scroll } of this.backdrop) {
+			sprite.tilePositionX = (this.scrollX * scroll) / BACKDROP_SCALE
 		}
 	}
 
@@ -960,28 +952,19 @@ export default class Play extends Phaser.Scene {
 
 	private buildParallax(): void {
 		const { width, height } = this.scale
-		BG_LAYERS.forEach((n, i) => {
-			const key = `layer_${String(n).padStart(4, '0')}`
+		BACKDROP_LAYERS.forEach(({ key, scroll }, i) => {
 			if (!this.textures.exists(key)) return
-			this.backgroundLayers.push(
-				this.add
+			this.backdrop.push({
+				sprite: this.add
 					.tileSprite(0, 0, width, height, key)
 					.setOrigin(0, 0)
+					.setTileScale(BACKDROP_SCALE)
 					.setDepth(-20 + i),
-			)
+				scroll,
+			})
 		})
-		for (const [key, depth] of [
-			['ground_back', -1],
-			['ground_front', 0],
-		] as const) {
-			if (!this.textures.exists(key)) continue
-			this.groundLayers.push(
-				this.add
-					.tileSprite(0, 0, width, height, key)
-					.setOrigin(0, 0)
-					.setDepth(depth),
-			)
-		}
+		// The HUD sits over the bright sky, so darken it the same way as the duel.
+		addBackdropShade(this)
 	}
 
 	private buildAvatar(): void {
@@ -1040,9 +1023,7 @@ export default class Play extends Phaser.Scene {
 
 	private onResize(): void {
 		const { width, height } = this.scale
-		for (const l of [...this.backgroundLayers, ...this.groundLayers]) {
-			l.setSize(width, height)
-		}
+		for (const { sprite } of this.backdrop) sprite.setSize(width, height)
 		this.avatar.setY(this.groundY())
 		this.vignette.setPosition(width / 2, height / 2)
 		this.vignette.setDisplaySize(width, height)
@@ -1102,30 +1083,24 @@ export default class Play extends Phaser.Scene {
 
 	private setupAudio(): void {
 		const s = this.settings
-		this.bgMusic = this.sound.add('bgMusic', {
+		this.bgMusic = this.sound.add(MUSIC.fight.key, {
 			volume: s.muted ? 0 : s.musicVolume,
 			loop: true,
 		})
 		if (!s.muted) this.bgMusic.play()
 
-		// This loop was created and then never started, so the run ambience was
-		// silent. Play it only when unmuted, matching bgMusic.
-		this.runLoop = this.sound.add('runSound', {
-			volume: s.muted ? 0 : s.sfxVolume * 0.22,
-			loop: true,
-		})
-		if (!s.muted) this.runLoop.play()
-
+		// Logical event -> sound key. There is no run-ambience loop: the old
+		// one was a single unlicensed clip, and the fight track covers the run.
 		const map: Record<string, string> = {
-			type: 'clickSound',
-			error: 'monsterHitSound',
-			hurt: 'monsterHitSound',
-			kill: 'monsterHitSound',
-			levelup: 'speedUpSound',
-			powerup: 'speedUpSound',
-			danger: 'monsterHitSound',
-			pause: 'pauseSound',
-			unpause: 'unpauseSound',
+			type: SFX.keyType.key,
+			error: SFX.mistake.key,
+			hurt: SFX.hitHeavy.key,
+			kill: SFX.ko.key,
+			levelup: SFX.levelUp.key,
+			powerup: SFX.powerUp.key,
+			danger: SFX.danger.key,
+			pause: SFX.pause.key,
+			unpause: SFX.unpause.key,
 		}
 		for (const [logical, physical] of Object.entries(map)) {
 			if (!this.cache.audio.exists(physical)) continue
@@ -1160,7 +1135,6 @@ export default class Play extends Phaser.Scene {
 	private applyVolumes(): void {
 		const s = this.settings
 		this.setVolume(this.bgMusic, s.muted ? 0 : s.musicVolume)
-		this.setVolume(this.runLoop, s.muted ? 0 : s.sfxVolume * 0.22)
 		for (const [key, sfx] of Object.entries(this.sfx)) {
 			this.setVolume(sfx, s.sfxVolume * this.sfxGain(key))
 		}
@@ -1175,7 +1149,6 @@ export default class Play extends Phaser.Scene {
 
 	private stopAllSounds(): void {
 		this.bgMusic?.stop()
-		this.runLoop?.stop()
 		for (const s of Object.values(this.sfx)) s.stop()
 	}
 

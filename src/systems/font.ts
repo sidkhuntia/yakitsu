@@ -6,8 +6,14 @@ import { loadData } from './persistence'
  * Deliberately distinct from `bodyFont`. The pixel face is low-legibility by
  * design, which is fine for a score readout and actively hostile for a 12-letter
  * word the player has to read under a deadline.
+ *
+ * The family name is quoted. Phaser writes the canvas `ctx.font` shorthand as
+ * `<size> <family>`, and an unquoted name must be an identifier sequence, so
+ * `Press Start 2P` (its `2P` starts with a digit) makes the whole shorthand
+ * invalid. The canvas then silently keeps its default `10px sans-serif`, and
+ * every canvas text renders at 10px. Quoting makes the shorthand valid.
  */
-const DISPLAY_FONT = 'Retro Font'
+const DISPLAY_FONT = '"Press Start 2P", monospace'
 
 /**
  * The face used for anything the player has to actually READ as language:
@@ -21,6 +27,23 @@ const DISPLAY_FONT = 'Retro Font'
  */
 const READABLE_FONT =
 	"'Atkinson Hyperlegible', 'Atkinson', Verdana, 'DejaVu Sans', Geneva, sans-serif"
+
+/**
+ * Resolves once the web fonts Phaser draws with are in the browser's cache.
+ *
+ * `@font-face` faces are fetched lazily, and a canvas text drawn before its
+ * face has loaded keeps the fallback face's metrics for its whole life. Boot
+ * waits on this before it creates any text or announces the assets as ready.
+ * A failed load resolves anyway, so the game still starts in the fallback face.
+ */
+export function fontsReady(): Promise<void> {
+	if (typeof document === 'undefined' || !('fonts' in document))
+		return Promise.resolve()
+	const loads = ['16px "Press Start 2P"', "16px 'Atkinson Hyperlegible'"].map(
+		(spec) => document.fonts.load(spec).catch(() => []),
+	)
+	return Promise.all(loads).then(() => undefined)
+}
 
 /**
  * Resolve the font family for readable text, honouring `dyslexicFont`.

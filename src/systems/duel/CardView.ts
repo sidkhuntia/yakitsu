@@ -6,7 +6,9 @@ const COL_PENDING = '#ffffff'
 const COL_TYPED = '#00e676'
 const COL_WRONG = '#ff1744'
 const COL_CARET = '#ffd600'
-const LETTER_GAP = 4
+// Tight enough that the longest special word (11 letters at 28px) keeps a
+// clear gap to the heavy card's plate, 330px away.
+const LETTER_GAP = 2
 const PAD = 18
 
 export interface CardStyle {
@@ -42,9 +44,9 @@ export class CardView {
 			.rectangle(0, 0, 10, style.fontSize + 26, 0x05080d, 0.72)
 			.setStrokeStyle(2, style.accent, 0.35)
 		this.caption = scene.add
-			.text(0, -(style.fontSize / 2 + 26), style.caption, {
+			.text(0, -(style.fontSize / 2 + 32), style.caption, {
 				fontFamily: displayFont(),
-				fontSize: '16px',
+				fontSize: '14px',
 				color: '#' + style.accent.toString(16).padStart(6, '0'),
 			})
 			.setOrigin(0.5)

@@ -1,6 +1,7 @@
+/* Press Start 2P, SIL Open Font License 1.1; see assets/fonts/OFL.txt. */
 @font-face {
-	font-family: 'Retro Font';
-	src: url('/assets/fonts/gaming_font.woff2') format('woff2');
+	font-family: 'Press Start 2P';
+	src: url('/assets/fonts/PressStart2P-Regular.ttf') format('truetype');
 	font-weight: normal;
 	font-style: normal;
 	font-display: block;
@@ -13,7 +14,7 @@
 	--accent-2: #64ffda;
 	--ink: #e1f5fe;
 	--muted: #7f8fa6;
-	--pixel: 'Retro Font', 'Jersey 10', monospace;
+	--pixel: 'Press Start 2P', 'Jersey 10', monospace;
 
 	color-scheme: dark;
 	color: var(--ink);
@@ -614,6 +615,10 @@ canvas {
 	.game-logo {
 		font-size: 1.1rem;
 		letter-spacing: 2px;
+	}
+	/* Press Start 2P is one em per character: keep modal titles inside a phone. */
+	.modal-title {
+		font-size: 1.2rem;
 	}
 	.control-btn {
 		padding: 7px 11px;

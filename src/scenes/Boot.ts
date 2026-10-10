@@ -1,4 +1,7 @@
 import Phaser from 'phaser'
+import { loadAudio } from '../systems/sfx'
+import { displayFont, fontsReady } from '../systems/font'
+import { loadBackdrop } from '../systems/backdrop'
 
 /**
  * Asset preloader.
@@ -9,6 +12,7 @@ import Phaser from 'phaser'
 export default class Boot extends Phaser.Scene {
 	private barFill?: Phaser.GameObjects.Rectangle
 	private label?: Phaser.GameObjects.Text
+	private progress = 0
 	private readonly barWidth = 420
 
 	constructor() {
@@ -30,60 +34,50 @@ export default class Boot extends Phaser.Scene {
 			.rectangle(barX - this.barWidth / 2, barY, 0, 14, 0x00e676)
 			.setOrigin(0, 0.5)
 
-		this.add
-			.text(barX, barY - 60, 'YAKITSKU', {
-				fontFamily: 'Retro Font',
-				fontSize: '52px',
-				color: '#ffb347',
-			})
-			.setOrigin(0.5)
+		// Canvas text drawn before the pixel face is loaded keeps the fallback
+		// face's metrics for its whole life, so these wait for the font.
+		void fontsReady().then(() => {
+			this.add
+				.text(barX, barY - 60, 'YAKITSU', {
+					fontFamily: displayFont(),
+					fontSize: '52px',
+					color: '#ffb347',
+				})
+				.setOrigin(0.5)
 
-		this.label = this.add
-			.text(barX, barY + 40, 'LOADING 0%', {
-				fontFamily: 'Retro Font',
-				fontSize: '16px',
-				color: '#7f8fa6',
-			})
-			.setOrigin(0.5)
+			this.label = this.add
+				.text(
+					barX,
+					barY + 40,
+					`LOADING ${Math.round(this.progress * 100)}%`,
+					{
+						fontFamily: displayFont(),
+						fontSize: '16px',
+						color: '#7f8fa6',
+					},
+				)
+				.setOrigin(0.5)
+		})
 
 		this.load.on('progress', (value: number) => {
+			this.progress = value
 			this.barFill?.setSize(this.barWidth * value, 14)
 			this.label?.setText(`LOADING ${Math.round(value * 100)}%`)
 		})
 
 		// --- shared assets ---------------------------------------------------
-		this.load.image('logo', 'assets/placeholder.webp')
-		this.load.image('menuBackground', 'assets/menu_background.webp')
-		this.load.image('gameOverBackground', 'assets/gameover_background.webp')
 
-		this.load.audio('bgMusic', 'assets/audio/background_music.mp3')
-		this.load.audio(
-			'menuMusic',
-			'assets/audio/ui/menu_background_music.mp3',
-		)
-		this.load.audio('clickSound', 'assets/audio/ui/click.mp3')
-		this.load.audio('pauseSound', 'assets/audio/ui/pause.mp3')
-		this.load.audio('unpauseSound', 'assets/audio/ui/unpause.mp3')
-		this.load.audio('runSound', 'assets/audio/avatar/run.mp3')
-		this.load.audio('speedUpSound', 'assets/audio/avatar/speed_up.mp3')
-		this.load.audio('monsterHitSound', 'assets/audio/monsters/hit.mp3')
+		loadAudio(this.load)
 
 		// --- power-ups -------------------------------------------------------
-		this.load.image('ice', 'assets/ice.png')
-		this.load.image('bomb', 'assets/bomb.png')
+		this.load.svg('ice', 'assets/ice.svg', { width: 32, height: 32 })
+		this.load.svg('bomb', 'assets/bomb.svg', { width: 32, height: 32 })
 
 		// --- word list -------------------------------------------------------
 		this.load.script('words', 'data/words/words.js')
 
 		// --- world -----------------------------------------------------------
-		for (let n = 2; n <= 11; n++) {
-			this.load.image(
-				`layer_${String(n).padStart(4, '0')}`,
-				`assets/background/Layer_${String(n).padStart(4, '0')}.png`,
-			)
-		}
-		this.load.image('ground_back', 'assets/background/Layer_0001.png')
-		this.load.image('ground_front', 'assets/background/Layer_0000.png')
+		loadBackdrop(this.load)
 
 		// --- actors ----------------------------------------------------------
 		this.load.spritesheet('avatar_run', 'assets/character/Run.png', {
@@ -91,7 +85,17 @@ export default class Boot extends Phaser.Scene {
 			frameHeight: 180,
 		})
 
-		// Duel mode: hero reactions, and the goblin's stance and swing.
+		// Duel mode: hero stance, swings, reactions, and the goblin's stance and swing.
+		for (const [key, file] of [
+			['avatar_idle', 'Idle'],
+			['avatar_attack1', 'Attack1'],
+			['avatar_attack2', 'Attack2'],
+		] as const) {
+			this.load.spritesheet(key, `assets/character/${file}.png`, {
+				frameWidth: 180,
+				frameHeight: 180,
+			})
+		}
 		this.load.spritesheet('avatar_hit', 'assets/character/Take Hit.png', {
 			frameWidth: 180,
 			frameHeight: 180,
@@ -133,8 +137,11 @@ export default class Boot extends Phaser.Scene {
 	}
 
 	create(): void {
-		// Everything is in the cache now; unblock any queued start request.
-		this.game.events.emit('yk-assets-ready')
+		// Everything is in the cache now, and so are the fonts. Unblock any
+		// queued start request only once Play or Duel can draw with them.
+		void fontsReady().then(() => {
+			this.game.events.emit('yk-assets-ready')
+		})
 
 		this.cameras.main.fadeOut(260, 10, 15, 22)
 		this.cameras.main.once(

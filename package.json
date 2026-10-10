@@ -8,6 +8,7 @@
 		"build": "tsc && vite build",
 		"preview": "vite preview",
 		"balance": "tsx scripts/balance.ts",
+		"check:assets": "tsx scripts/check-assets.ts",
 		"sweep": "tsx scripts/sweep-rules.ts",
 		"sweep:variants": "tsx scripts/sweep-variants.ts",
 		"sweep:v3": "tsx scripts/sweep-v3.ts",
@@ -18,7 +19,7 @@
 		"typecheck": "tsc --noEmit",
 		"lint": "eslint . --ext .js,.jsx,.ts,.tsx",
 		"format": "prettier --write .",
-		"verify": "npm run typecheck && npm run lint && npm run test && npm run build",
+		"verify": "npm run typecheck && npm run lint && npm run check:assets && npm run test && npm run build",
 		"prepare": "husky"
 	},
 	"devDependencies": {

@@ -23,6 +23,13 @@ import {
 import { CardView } from '../systems/duel/CardView'
 import { DuelHud } from '../systems/duel/DuelHud'
 import { DUEL, type MoveId, type Side } from '../systems/duel/duelTuning'
+import { MUSIC, SFX } from '../systems/sfx'
+import {
+	addBackdropShade,
+	BACKDROP_LAYERS,
+	BACKDROP_SCALE,
+	FLOOR_Y,
+} from '../systems/backdrop'
 
 type Phase = 'intro' | 'fight' | 'between' | 'over'
 
@@ -35,14 +42,23 @@ const GOBLIN_ATTACK_FPS = 16
 const GOBLIN_STRIKE_LEAD_MS = (6 / GOBLIN_ATTACK_FPS) * 1000
 /** The hero holds through most of its windup and dashes in over this long. */
 const HERO_DASH_MAX_MS = 180
-
-const BG_LAYERS = [11, 8, 5, 3, 2]
+/** Hero Knight swing sheets run at 14fps; the sword connects on frame 3. */
+const HERO_ATTACK_FPS = 14
+const HERO_STRIKE_FRAME = 3
+/** The guard pose (Take Hit, tinted blue) is held for this long. */
+const HERO_GUARD_MS = 260
+/**
+ * Where the feet sit below the centre of a frame, measured from each sheet's
+ * alpha bounds: Hero Knight at row 114 of 180, goblin at row 101 of 150.
+ */
+const PLAYER_FEET_PX = 24
+const GOBLIN_FEET_PX = 26
 
 const CARD_STYLE: Record<Slot, { accent: number; fontSize: number }> = {
-	jab: { accent: 0x64ffda, fontSize: 30 },
-	heavy: { accent: 0xffb300, fontSize: 30 },
-	special: { accent: 0xffd600, fontSize: 30 },
-	block: { accent: 0xff5252, fontSize: 44 },
+	jab: { accent: 0x64ffda, fontSize: 28 },
+	heavy: { accent: 0xffb300, fontSize: 28 },
+	special: { accent: 0xffd600, fontSize: 28 },
+	block: { accent: 0xff5252, fontSize: 40 },
 }
 
 /**
@@ -100,6 +116,12 @@ export default class Duel extends Phaser.Scene {
 	private simNow = 0
 	private clockMs: number = DUEL.roundTimeMs
 	private swing: Swing | null = null
+	/** The hero's swing in flight, from the dash until it lands or is stopped. */
+	private heroStrike: {
+		move: MoveId
+		landsAt: number
+		striking: boolean
+	} | null = null
 	private blockOffer: BlockOffer | null = null
 	/**
 	 * The player just finished a block word. If no `parried` follows in the
@@ -134,6 +156,7 @@ export default class Duel extends Phaser.Scene {
 		this.simNow = 0
 		this.clockMs = DUEL.roundTimeMs
 		this.swing = null
+		this.heroStrike = null
 		this.blockOffer = null
 		this.awaitingParry = false
 		this.cards = new Map()
@@ -186,7 +209,7 @@ export default class Duel extends Phaser.Scene {
 				'Type a card to attack · type the RED word to parry (your word waits) · Backspace to cancel',
 				{
 					fontFamily: displayFont(),
-					fontSize: '16px',
+					fontSize: '12px',
 					color: '#8fa3bd',
 				},
 			)
@@ -253,29 +276,17 @@ export default class Duel extends Phaser.Scene {
 	private buildWorld(): void {
 		const { width, height } = this.scale
 		this.cameras.main.setBackgroundColor('#0a0f16')
-		BG_LAYERS.forEach((n, i) => {
-			const key = `layer_${String(n).padStart(4, '0')}`
+		BACKDROP_LAYERS.forEach(({ key }, i) => {
 			if (this.textures.exists(key))
 				this.add
 					.tileSprite(0, 0, width, height, key)
 					.setOrigin(0)
+					.setTileScale(BACKDROP_SCALE)
 					.setDepth(-20 + i)
 		})
-		for (const [key, depth] of [
-			['ground_back', -1],
-			['ground_front', 0],
-		] as const) {
-			if (this.textures.exists(key))
-				this.add
-					.tileSprite(0, 0, width, height, key)
-					.setOrigin(0)
-					.setDepth(depth)
-		}
-		// Darken the backdrop so the fighters and cards own the frame.
-		this.add
-			.rectangle(0, 0, width, height, 0x000000, 0.35)
-			.setOrigin(0)
-			.setDepth(-2)
+		// Darken the sky and mountains so the cards and HUD own the frame. The
+		// fighters, ground and cards all sit above the shade.
+		addBackdropShade(this)
 	}
 
 	private buildFighters(): void {
@@ -297,7 +308,9 @@ export default class Duel extends Phaser.Scene {
 				repeat,
 			})
 		}
-		anim('hero-dash', 'avatar_run', 7, 24, -1)
+		anim('hero-idle', 'avatar_idle', 10, 10, -1)
+		anim('hero-attack1', 'avatar_attack1', 6, HERO_ATTACK_FPS)
+		anim('hero-attack2', 'avatar_attack2', 6, HERO_ATTACK_FPS)
 		anim('hero-hit', 'avatar_hit', 3, 12)
 		anim('hero-death', 'avatar_death', 10, 10)
 		anim('gob-idle', 'monster_Goblin_idle', 3, 11, -1)
@@ -305,24 +318,19 @@ export default class Duel extends Phaser.Scene {
 		anim('gob-hit', 'monster_Goblin_hit', 3, 12)
 		anim('gob-death', 'monster_Goblin_death', 3, 8)
 
-		const y = this.groundY()
-		// The hero pack in the repo has no idle sheet, so a held run frame plus
-		// a breathing bob stands in for a stance.
 		this.player = this.add
-			.sprite(PLAYER_HOME_X, y - 40, 'avatar_run', 3)
+			.sprite(
+				PLAYER_HOME_X,
+				FLOOR_Y - PLAYER_FEET_PX * PLAYER_SCALE,
+				'avatar_idle',
+				0,
+			)
 			.setScale(PLAYER_SCALE)
 			.setDepth(10)
-		this.tweens.add({
-			targets: this.player,
-			scaleY: PLAYER_SCALE * 1.02,
-			duration: 600,
-			yoyo: true,
-			repeat: -1,
-			ease: 'Sine.easeInOut',
-		})
+		this.player.play('hero-idle')
 
 		this.goblin = this.add
-			.sprite(GOBLIN_HOME_X, y - 70, 'monster_Goblin_idle', 0)
+			.sprite(GOBLIN_HOME_X, this.goblinHomeY(), 'monster_Goblin_idle', 0)
 			.setScale(GOBLIN_SCALE)
 			.setFlipX(true)
 			.setDepth(10)
@@ -529,12 +537,13 @@ export default class Duel extends Phaser.Scene {
 	private resetPoses(): void {
 		this.tweens.killTweensOf([this.goblin])
 		this.goblin
-			.setPosition(GOBLIN_HOME_X, this.groundY() - 70)
+			.setPosition(GOBLIN_HOME_X, this.goblinHomeY())
 			.clearTint()
 			.setAlpha(1)
 		this.goblin.play('gob-idle')
-		this.player.setX(PLAYER_HOME_X).clearTint().setAlpha(1)
-		this.player.stop().setTexture('avatar_run', 3)
+		this.heroStrike = null
+		this.player.setX(PLAYER_HOME_X).setAlpha(1)
+		this.restHero()
 		this.dizzy?.destroy()
 		this.dizzy = undefined
 	}
@@ -552,7 +561,10 @@ export default class Duel extends Phaser.Scene {
 		if (this.phase === 'fight')
 			this.match.step(this.simNow, { p2: this.bot })
 		for (const e of this.match.drain()) this.onEvent(e)
-		if (this.phase === 'fight') this.driveGoblinStrike()
+		if (this.phase === 'fight') {
+			this.driveGoblinStrike()
+			this.driveHeroStrike()
+		}
 
 		// Hold the clock between rounds instead of reading 0.
 		if (this.phase === 'fight')
@@ -598,6 +610,25 @@ export default class Duel extends Phaser.Scene {
 			duration: Math.max(60, s.landsAt - this.simNow),
 			ease: 'Quad.easeIn',
 		})
+	}
+
+	/**
+	 * Swing the hero so the sword connects at `landsAt`. The swing starts a
+	 * fixed lead before the hit, the goblin's approach, and its frame rate is
+	 * set so the strike frame lands on the hit even when the windup is short.
+	 */
+	private driveHeroStrike(): void {
+		const s = this.heroStrike
+		if (!s || s.striking) return
+		const lead = (HERO_STRIKE_FRAME / HERO_ATTACK_FPS) * 1000
+		if (this.simNow < s.landsAt - lead) return
+		s.striking = true
+		const left = Math.max(1, s.landsAt - this.simNow)
+		this.player.play({
+			key: s.move === 'jab' ? 'hero-attack1' : 'hero-attack2',
+			frameRate: Math.min(60, (HERO_STRIKE_FRAME * 1000) / left),
+		})
+		this.play('whoosh')
 	}
 
 	private goblinRetreat(): void {
@@ -768,6 +799,9 @@ export default class Duel extends Phaser.Scene {
 	private heroDash(move: MoveId, landsAt: number): void {
 		const left = Math.max(0, landsAt - this.simNow)
 		const dash = Math.min(HERO_DASH_MAX_MS, Math.max(60, left))
+		// The swing animation starts on its own timer (driveHeroStrike); the
+		// dash only moves the body in over the last stretch.
+		this.heroStrike = { move, landsAt, striking: false }
 		this.tweens.killTweensOf(this.player)
 		this.player.setScale(PLAYER_SCALE)
 		this.tweens.add({
@@ -776,7 +810,6 @@ export default class Duel extends Phaser.Scene {
 			duration: dash,
 			delay: Math.max(0, left - dash),
 			ease: 'Quad.easeIn',
-			onStart: () => this.player.play('hero-dash'),
 		})
 		if (move === 'special') {
 			this.juice.slowMo(0.35, 260)
@@ -785,6 +818,7 @@ export default class Duel extends Phaser.Scene {
 	}
 
 	private heroRetreat(): void {
+		this.heroStrike = null
 		this.tweens.killTweensOf(this.player)
 		this.tweens.add({
 			targets: this.player,
@@ -792,10 +826,27 @@ export default class Duel extends Phaser.Scene {
 			duration: 240,
 			delay: 80,
 			ease: 'Quad.easeOut',
-			onComplete: () => {
-				this.player.stop().setTexture('avatar_run', 3).clearTint()
-			},
+			onComplete: () => this.restHero(),
 		})
+	}
+
+	/** Back to the stance. Skipped while a swing or a guard owns the sprite. */
+	private restHero(): void {
+		if (this.heroStrike || this.sim.fighters.p1.hp <= 0) return
+		this.player.clearTint()
+		this.player.play('hero-idle', true)
+	}
+
+	/** The hero's guard: the Take Hit sheet held on frame 0, tinted blue. */
+	private blockPose(ms: number): void {
+		this.heroStrike = null
+		this.tweens.killTweensOf(this.player)
+		this.player.stop().setTexture('avatar_hit', 0).setTint(0x80d8ff)
+		this.later(ms, () => this.restHero())
+	}
+
+	private goblinHomeY(): number {
+		return FLOOR_Y - GOBLIN_FEET_PX * GOBLIN_SCALE
 	}
 
 	private onHeroHit(move: MoveId, damage: number, counter: boolean): void {
@@ -825,7 +876,7 @@ export default class Duel extends Phaser.Scene {
 			0xffffff,
 			heavy ? 22 : 10,
 		)
-		this.play('hit', heavy ? 0.8 : 1.2)
+		this.play(heavy ? 'hitHeavy' : 'hitLight')
 		this.floatText(
 			this.goblin.x,
 			this.goblin.y - 120,
@@ -842,18 +893,18 @@ export default class Duel extends Phaser.Scene {
 		this.goblin.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
 			if (this.sim.fighters.p2.hp > 0) this.goblin.play('gob-idle')
 		})
+		this.heroStrike = null
 		this.player.play('hero-hit')
 		this.player.setTint(0xff6666)
 		this.time.delayedCall(300, () => this.player.clearTint())
-		this.player.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
-			if (this.sim.fighters.p1.hp > 0)
-				this.player.stop().setTexture('avatar_run', 3)
-		})
+		this.player.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () =>
+			this.restHero(),
+		)
 		this.juice.hitstop(80)
 		this.juice.shake(8, 240)
 		this.juice.flash(0xff1744, 120)
 		this.particles.burst(this.player.x + 30, this.player.y, 0xff5252, 16)
-		this.play('hurt')
+		this.play('hitHeavy')
 		this.floatText(
 			this.player.x,
 			this.player.y - 150,
@@ -871,12 +922,13 @@ export default class Duel extends Phaser.Scene {
 		if (defender === 'p1') {
 			this.endSwing()
 			this.goblinRetreat()
+			this.blockPose(HERO_GUARD_MS)
 		} else {
 			// The goblin deflected your attack, so your dash is over.
 			this.heroRetreat()
 		}
 		this.juice.shake(3, 120)
-		this.play('parry', 1.3)
+		this.play('parry')
 		this.floatText(
 			(this.player.x + this.goblin.x) / 2,
 			this.groundY() - 320,
@@ -889,6 +941,7 @@ export default class Duel extends Phaser.Scene {
 	/** You parried the goblin's swing: it is staggered and open to counters. */
 	private onParry(perfect: boolean): void {
 		this.endSwing()
+		this.blockPose(HERO_GUARD_MS)
 		this.goblin.play('gob-hit')
 		this.tweens.add({
 			targets: this.goblin,
@@ -947,7 +1000,7 @@ export default class Duel extends Phaser.Scene {
 			24,
 			300,
 		)
-		this.play('hurt')
+		this.play('hitHeavy')
 		this.floatText(
 			(this.player.x + this.goblin.x) / 2,
 			this.groundY() - 320,
@@ -963,6 +1016,7 @@ export default class Duel extends Phaser.Scene {
 		this.phase = 'between'
 		if (winner === 'p2') this.player.play('hero-death')
 		if (winner === 'p1') this.goblin.play('gob-death')
+		if (reason === 'ko') this.play('ko')
 		this.juice.slowMo(0.3, 700)
 		const title = reason === 'ko' ? 'K.O.' : 'TIME'
 		const sub =
@@ -1065,23 +1119,26 @@ export default class Duel extends Phaser.Scene {
 
 	private setupAudio(): void {
 		const s = this.settings
-		if (this.cache.audio.exists('bgMusic')) {
-			this.music = this.sound.add('bgMusic', {
+		if (this.cache.audio.exists(MUSIC.fight.key)) {
+			this.music = this.sound.add(MUSIC.fight.key, {
 				volume: s.muted ? 0 : s.musicVolume * 0.7,
 				loop: true,
 			})
 			if (!s.muted) this.music.play()
 		}
+		// Logical event -> sound key, with the gain each one is mixed at.
 		const map: Record<string, [string, number]> = {
-			type: ['clickSound', 0.2],
-			error: ['monsterHitSound', 0.25],
-			hit: ['monsterHitSound', 0.7],
-			hurt: ['monsterHitSound', 0.7],
-			parry: ['speedUpSound', 0.6],
-			danger: ['pauseSound', 0.35],
-			go: ['speedUpSound', 0.5],
-			pause: ['pauseSound', 0.5],
-			unpause: ['unpauseSound', 0.5],
+			type: [SFX.keyType.key, 0.2],
+			error: [SFX.mistake.key, 0.25],
+			hitLight: [SFX.hitLight.key, 0.7],
+			hitHeavy: [SFX.hitHeavy.key, 0.8],
+			whoosh: [SFX.whoosh.key, 0.4],
+			parry: [SFX.parry.key, 0.6],
+			danger: [SFX.danger.key, 0.35],
+			go: [SFX.roundStart.key, 0.5],
+			ko: [SFX.ko.key, 0.6],
+			pause: [SFX.pause.key, 0.5],
+			unpause: [SFX.unpause.key, 0.5],
 		}
 		for (const [name, [key, gain]] of Object.entries(map)) {
 			if (!this.cache.audio.exists(key)) continue

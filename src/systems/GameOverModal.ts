@@ -1,6 +1,8 @@
 import Phaser from 'phaser'
 import { loadData } from './persistence'
+import { SFX } from './sfx'
 import type { DifficultyProfile } from './tuning'
+import { displayFont } from './font'
 
 export interface GameOverSummary {
 	score: number
@@ -51,8 +53,8 @@ export class GameOverModal extends Phaser.GameObjects.Container {
 		const accent = summary.difficulty.color
 		const hex = `#${accent.toString(16).padStart(6, '0')}`
 
-		this.clickSound = scene.cache.audio.exists('clickSound')
-			? scene.sound.add('clickSound', { volume: 0.5 })
+		this.clickSound = scene.cache.audio.exists(SFX.uiClick.key)
+			? scene.sound.add(SFX.uiClick.key, { volume: 0.5 })
 			: undefined
 
 		const dim = scene.add
@@ -71,7 +73,7 @@ export class GameOverModal extends Phaser.GameObjects.Container {
 				cy - panelH / 2 + 44,
 				summary.isRecord ? 'NEW RECORD' : 'RUN OVER',
 				{
-					fontFamily: 'Retro Font',
+					fontFamily: displayFont(),
 					fontSize: '34px',
 					color: summary.isRecord ? '#00e676' : '#ff5252',
 				},
@@ -84,7 +86,7 @@ export class GameOverModal extends Phaser.GameObjects.Container {
 				cy - panelH / 2 + 76,
 				summary.difficulty.label.toUpperCase(),
 				{
-					fontFamily: 'Retro Font',
+					fontFamily: displayFont(),
 					fontSize: '16px',
 					color: hex,
 				},
@@ -95,14 +97,14 @@ export class GameOverModal extends Phaser.GameObjects.Container {
 		const scoreY = cy - panelH / 2 + 128
 		const score = scene.add
 			.text(cx, scoreY, summary.score.toLocaleString(), {
-				fontFamily: 'Retro Font',
+				fontFamily: displayFont(),
 				fontSize: '56px',
 				color: '#ffffff',
 			})
 			.setOrigin(0.5)
 		const scoreLabel = scene.add
 			.text(cx, scoreY + 36, 'SCORE', {
-				fontFamily: 'Retro Font',
+				fontFamily: displayFont(),
 				fontSize: '13px',
 				color: '#7f8fa6',
 			})
@@ -129,7 +131,7 @@ export class GameOverModal extends Phaser.GameObjects.Container {
 			statEls.push(
 				scene.add
 					.text(colX[i], gridY - 30, label.toUpperCase(), {
-						fontFamily: 'Retro Font',
+						fontFamily: displayFont(),
 						fontSize: '13px',
 						color: '#7f8fa6',
 					})
@@ -138,7 +140,7 @@ export class GameOverModal extends Phaser.GameObjects.Container {
 			statEls.push(
 				scene.add
 					.text(colX[i], gridY, value, {
-						fontFamily: 'Retro Font',
+						fontFamily: displayFont(),
 						fontSize: '30px',
 						color: '#ffffff',
 					})
@@ -147,7 +149,7 @@ export class GameOverModal extends Phaser.GameObjects.Container {
 			statEls.push(
 				scene.add
 					.text(colX[i], gridY + 24, `best ${best}`, {
-						fontFamily: 'Retro Font',
+						fontFamily: displayFont(),
 						fontSize: '13px',
 						color: '#00e676',
 					})
@@ -162,7 +164,7 @@ export class GameOverModal extends Phaser.GameObjects.Container {
 				gridY + 62,
 				`${summary.words} words   ·   level ${summary.level}   ·   ${fmtDuration(summary.durationSec)}`,
 				{
-					fontFamily: 'Retro Font',
+					fontFamily: displayFont(),
 					fontSize: '15px',
 					color: '#9fb3c8',
 				},
@@ -181,7 +183,7 @@ export class GameOverModal extends Phaser.GameObjects.Container {
 						gridY + 90,
 						`NEW BEST ${improvements.join(' + ').toUpperCase()}!`,
 						{
-							fontFamily: 'Retro Font',
+							fontFamily: displayFont(),
 							fontSize: '16px',
 							color: '#00e676',
 						},
@@ -197,7 +199,7 @@ export class GameOverModal extends Phaser.GameObjects.Container {
 		): Phaser.GameObjects.Text => {
 			const t = scene.add
 				.text(cx, y, label, {
-					fontFamily: 'Retro Font',
+					fontFamily: displayFont(),
 					fontSize: '20px',
 					color: '#08131f',
 					backgroundColor: `#${color.toString(16).padStart(6, '0')}`,

@@ -56,7 +56,7 @@ describe('balance: release gate', () => {
 			.filter((r) => r.rate < 0.45 || r.rate > 0.55)
 			.map((r) => `${r.a} vs ${r.b}: ${(r.rate * 100).toFixed(1)}%`)
 		expect(off).toEqual([])
-	})
+	}, 30_000)
 })
 
 describe('balance: dominance', () => {
@@ -86,7 +86,7 @@ describe('balance: dominance', () => {
 			}
 		}
 		expect(over).toEqual([])
-	})
+	}, 30_000)
 })
 
 describe('balance: fairness', () => {

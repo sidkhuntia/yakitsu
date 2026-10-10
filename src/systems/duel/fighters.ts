@@ -139,8 +139,12 @@ const special = (o: Partial<FighterMove>): FighterMove => ({
 })
 
 /**
- * Starting numbers. The balance harness owns tuning these; change them only
- * with a fresh `pnpm balance` run.
+ * Balance-tuned roster. Every fighter uses the hero's timing, word tiers,
+ * block rules, interrupts and meter costs for its jab, heavy and special.
+ * Fighters differ only in maxHp, the three damages, and their signature, so
+ * the balance question is numbers and mechanism, not tier or windup scaling.
+ *
+ * Change these numbers only with a fresh `pnpm tune` and `pnpm balance` run.
  */
 export const FIGHTERS: Record<FighterId, FighterDef> = {
 	hero: {
@@ -159,77 +163,60 @@ export const FIGHTERS: Record<FighterId, FighterDef> = {
 	goblin: {
 		id: 'goblin',
 		name: 'Goblin',
-		title: 'Fast hands, short words',
-		maxHp: 90,
+		title: 'Chains quick hits',
+		maxHp: 94,
 		moves: {
-			jab: jab({ windupMs: 250 }),
-			heavy: heavy({
-				tier: 1,
-				damage: 10,
-				windupMs: 1000,
-				parryableAtWpm: 66,
-			}),
-			special: special({
-				tier: 2,
-				damage: 20,
-				windupMs: 1200,
-				parryableAtWpm: 80,
-			}),
+			jab: jab({ damage: 3 }),
+			heavy: heavy({ damage: 15 }),
+			special: special({ damage: 32 }),
 		},
-		signature: { kind: 'combo', bonusPerLink: 2, maxBonus: 6 },
+		signature: { kind: 'combo', bonusPerLink: 2, maxBonus: 2 },
 		signatureText:
-			'Combo: each hit in a quick chain adds +2 damage (max +6).',
+			'Combo: each hit in a quick chain adds +2 damage (max +2).',
 	},
 	skeleton: {
 		id: 'skeleton',
 		name: 'Skeleton',
 		title: 'Shield up, strike back',
-		maxHp: 110,
+		maxHp: 122,
 		moves: {
-			jab: jab({ damage: 3, windupMs: 320 }),
-			heavy: heavy({
-				damage: 14,
-				windupMs: 1200,
-				parryableAtWpm: 50,
-			}),
-			special: special({
-				damage: 24,
-				windupMs: 1400,
-				parryableAtWpm: 65,
-			}),
+			jab: jab({ damage: 2 }),
+			heavy: heavy({ damage: 7 }),
+			special: special({ damage: 27 }),
 		},
-		signature: { kind: 'guard', incomingWindupScale: 1.2 },
-		signatureText: 'Bone Guard: attacks against it wind up 20% slower.',
+		signature: { kind: 'guard', incomingWindupScale: 1.1 },
+		signatureText: 'Bone Guard: attacks against it wind up 10% slower.',
 	},
 	mushroom: {
 		id: 'mushroom',
 		name: 'Mushroom',
 		title: 'Slow rot',
-		maxHp: 100,
+		maxHp: 105,
 		moves: {
-			jab: jab({ damage: 3 }),
-			heavy: heavy({ damage: 12, windupMs: 1150, parryableAtWpm: 55 }),
-			special: special({ damage: 16 }),
+			jab: jab({ damage: 4 }),
+			heavy: heavy({ damage: 13 }),
+			special: special({ damage: 20 }),
 		},
 		signature: {
 			kind: 'poison',
 			move: 'special',
-			dps: 3,
-			durationMs: 5000,
+			dps: 2,
+			durationMs: 4500,
 		},
-		signatureText: 'Spores: its special poisons for 3 damage a second, 5s.',
+		signatureText:
+			'Spores: its special poisons for 2 damage a second, 4.5s.',
 	},
 	eye: {
 		id: 'eye',
 		name: 'Flying Eye',
 		title: 'Feeds on focus',
-		maxHp: 85,
+		maxHp: 93,
 		moves: {
-			jab: jab({ windupMs: 280 }),
-			heavy: heavy({ windupMs: 1050, parryableAtWpm: 60 }),
-			special: special({ windupMs: 1250, parryableAtWpm: 75 }),
+			jab: jab({ damage: 4 }),
+			heavy: heavy({ damage: 14 }),
+			special: special({ damage: 21 }),
 		},
-		signature: { kind: 'drain', meterPerHit: 6 },
-		signatureText: 'Gaze: every hit steals 6 meter from the target.',
+		signature: { kind: 'drain', meterPerHit: 8 },
+		signatureText: 'Gaze: every hit steals 8 meter from the target.',
 	},
 }

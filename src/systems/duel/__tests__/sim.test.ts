@@ -17,6 +17,33 @@ function variant(
 
 const HERO = FIGHTERS.hero
 
+// Explicit mechanism fixtures. Each is the hero with one signature and the
+// move numbers its tests assert. They do not read the roster, so tuning
+// FIGHTERS cannot break a mechanism test.
+const COMBO_GOBLIN: FighterDef = {
+	...HERO,
+	id: 'goblin',
+	signature: { kind: 'combo', bonusPerLink: 2, maxBonus: 6 },
+}
+const GUARD_SKELETON: FighterDef = {
+	...HERO,
+	id: 'skeleton',
+	moves: { ...HERO.moves, jab: { ...HERO.moves.jab, windupMs: 320 } },
+	signature: { kind: 'guard', incomingWindupScale: 1.2 },
+}
+const POISON_MUSHROOM: FighterDef = {
+	...HERO,
+	id: 'mushroom',
+	moves: { ...HERO.moves, special: { ...HERO.moves.special, damage: 16 } },
+	signature: { kind: 'poison', move: 'special', dps: 3, durationMs: 5000 },
+}
+const DRAIN_EYE: FighterDef = {
+	...HERO,
+	id: 'eye',
+	moves: { ...HERO.moves, jab: { ...HERO.moves.jab, windupMs: 280 } },
+	signature: { kind: 'drain', meterPerHit: 6 },
+}
+
 /** A started round with its opening events already drained. */
 function sim(
 	p1: FighterDef = HERO,
@@ -293,14 +320,25 @@ describe('DuelSim: windups and timing', () => {
 describe('DuelSim: signatures', () => {
 	it('combo bonus grows with the chain and caps', () => {
 		// Goblin's combo: +2 per link, max +6. Landings every 300ms stay in chain.
-		const s = sim(FIGHTERS.goblin, HERO, { rules: { staleFactor: 1 } })
+		const s = sim(COMBO_GOBLIN, HERO, { rules: { staleFactor: 1 } })
 		for (let i = 0; i < 6; i++) s.attack('p1', 'jab', false, i * 300)
 		s.advance(2000)
 		expect(hitDamages(s.drain())).toEqual([4, 6, 8, 10, 10, 10])
 	})
 
+	it('combo bonus is staled too: a third consecutive jab gets 0.64 of its bonus', () => {
+		// Jab 20, +2 per link. Stale 0.8: hit 2 = 16 + 1.6 -> 18; hit 3 =
+		// 12.8 + 2.56 -> 15. An unscaled bonus would give 17 on hit 3.
+		const s = sim(variant(COMBO_GOBLIN, 'jab', { damage: 20 }), HERO, {
+			rules: { staleFactor: 0.8 },
+		})
+		for (let i = 0; i < 3; i++) s.attack('p1', 'jab', false, i * 300)
+		s.advance(1000)
+		expect(hitDamages(s.drain())).toEqual([20, 18, 15])
+	})
+
 	it('guard lengthens the windup of attacks aimed at it', () => {
-		const s = sim(HERO, FIGHTERS.skeleton)
+		const s = sim(HERO, GUARD_SKELETON)
 		s.attack('p1', 'jab', false, 0) // into the guard: 300 x 1.2
 		s.attack('p2', 'jab', false, 0) // into hero: 320
 		const started = attacksStarted(s.drain())
@@ -313,14 +351,14 @@ describe('DuelSim: signatures', () => {
 	})
 
 	it('guard windup multiplies with windupScale', () => {
-		const s = sim(HERO, FIGHTERS.skeleton, { windupScale: { p1: 2 } })
+		const s = sim(HERO, GUARD_SKELETON, { windupScale: { p1: 2 } })
 		s.attack('p1', 'jab', false, 0)
 		expect(attacksStarted(s.drain())[0]).toMatchObject({ landsAt: 720 })
 	})
 
 	describe('poison', () => {
 		// Meter cost is not what these tests are about.
-		const freeSpecial = variant(FIGHTERS.mushroom, 'special', {
+		const freeSpecial = variant(POISON_MUSHROOM, 'special', {
 			meterCost: 0,
 		})
 
@@ -351,7 +389,7 @@ describe('DuelSim: signatures', () => {
 		})
 
 		it('can finish a fighter, ending the round', () => {
-			const weak = variant(FIGHTERS.mushroom, 'special', {
+			const weak = variant(POISON_MUSHROOM, 'special', {
 				meterCost: 0,
 				damage: 5,
 			})
@@ -371,7 +409,7 @@ describe('DuelSim: signatures', () => {
 
 		it('is cleared on a new round', () => {
 			const poisoner = variant(
-				variant(FIGHTERS.mushroom, 'special', { meterCost: 0 }),
+				variant(POISON_MUSHROOM, 'special', { meterCost: 0 }),
 				'jab',
 				{ damage: 999 },
 			)
@@ -392,7 +430,7 @@ describe('DuelSim: signatures', () => {
 		it('moves meter from the hit side and emits an event', () => {
 			// Eye hits hero. Eye gains 8 for the hit, hero gains 5 for being hit,
 			// then the drain takes min(hero 5, 6, room) = 5 from hero.
-			const s = sim(HERO, FIGHTERS.eye)
+			const s = sim(HERO, DRAIN_EYE)
 			s.attack('p2', 'jab', false, 0)
 			s.advance(280)
 			expect(s.fighters.p1.meter).toBe(0)
@@ -405,7 +443,7 @@ describe('DuelSim: signatures', () => {
 		})
 
 		it('steals at most meterPerHit', () => {
-			const s = sim(HERO, FIGHTERS.eye)
+			const s = sim(HERO, DRAIN_EYE)
 			s.fighters.p1.meter = 20
 			s.attack('p2', 'jab', false, 0)
 			s.advance(280)
@@ -489,7 +527,7 @@ describe('DuelSim: granularity invariance', () => {
 	 */
 	function replay(step: number | null) {
 		const s = new DuelSim({
-			fighters: { p1: HERO, p2: FIGHTERS.mushroom },
+			fighters: { p1: HERO, p2: POISON_MUSHROOM },
 		})
 		s.fighters.p2.meter = 100
 		const events: DuelEvent[] = []

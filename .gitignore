@@ -37,3 +37,4 @@ node_modules/
 shot-*.png
 scripts/out/
 assets-src/
+.claude/worktrees/

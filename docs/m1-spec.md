@@ -296,6 +296,24 @@ Rejected: a timing-window "just guard". Online it needs a window of several
 hundred ms to be fair at 200 ms RTT, which fast typists hit every time, and
 its balance would rest on an invented bot timing-error number.
 
+### Roster decision (gameplay change — review this)
+
+The first optimiser run converged but could not pass the gate, and the
+matrices showed why: hero vs goblin was 74 % at 40 WPM, 33 % at 70 and 99 %
+at 100. Fighters with different word tiers and windups scale with typing
+speed differently against fixed-ms windups, so no HP or damage numbers can
+match all three speeds. That is the fallback in the plan: make the fighters
+less different rather than miss the gate.
+
+- Every fighter now types the same word tiers and has the same windups,
+  hitstun and parry windows as the hero.
+- Fighters differ in max HP, jab/heavy/special damage, and their signature.
+  Signatures have floors so tuning can never delete one.
+- Staling also scales the goblin's combo bonus, so jab spam can't escape the
+  anti-spam rule through it.
+- Mechanism tests build their own fighter data instead of reading the
+  tunable roster, so re-tuning never breaks them.
+
 The CI test gates 70 WPM (runtime); the tuning target covers all three speeds.
 If 45–55 % proves unreachable at 40 or 100 WPM, pull fighter numbers toward
 the hero baseline before considering any change to the threshold, and only

@@ -302,12 +302,22 @@ describe('seeded decks', () => {
 		expect(mixSeed(1, 2, 3)).toBe(mixSeed(1, 2, 3))
 	})
 
-	it('the goblin heavy uses tier 1 words, the hero heavy tier 2', () => {
+	// Explicit fixture: a heavy on tier 1. The roster no longer varies tiers,
+	// so this test must not read goblin's numbers.
+	const TIER1_HEAVY: FighterDef = {
+		...FIGHTERS.hero,
+		id: 'goblin',
+		moves: {
+			...FIGHTERS.hero.moves,
+			heavy: { ...FIGHTERS.hero.moves.heavy, tier: 1 },
+		},
+	}
+	it('a tier 1 heavy uses tier 1 words, the hero heavy tier 2', () => {
 		const inTier = (word: string, tier: number) =>
 			word.length >= WORD_TIERS[tier].minLen &&
 			word.length <= WORD_TIERS[tier].maxLen
 		for (let seed = 1; seed <= 20; seed++) {
-			const goblin = seeded(seed, FIGHTERS.goblin)
+			const goblin = seeded(seed, TIER1_HEAVY)
 			const hero = seeded(seed, FIGHTERS.hero)
 			const goblinHeavy = goblin.card('heavy')!.word
 			const heroHeavy = hero.card('heavy')!.word

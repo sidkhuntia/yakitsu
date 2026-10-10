@@ -458,8 +458,9 @@ export class DuelSim {
 
 	/**
 	 * Damage order: base, x staling, x perfect, x counter, x resolve (attacker
-	 * below its threshold), + combo (attacker, from the defender's chain), then
-	 * round.
+	 * below its threshold), + combo x staling (attacker, from the defender's
+	 * chain), then round. Combo is staled too, so repeating a move cannot dodge
+	 * the anti-spam rule through the chain bonus.
 	 */
 	private land(attacker: Side, hit: PendingAttack): void {
 		const defenderSide = other(attacker)
@@ -485,7 +486,9 @@ export class DuelSim {
 				: 0
 		defender.lastHitAt = hit.landsAt
 		if (sig.kind === 'combo') {
-			damage += Math.min(sig.maxBonus, defender.chain * sig.bonusPerLink)
+			damage +=
+				Math.min(sig.maxBonus, defender.chain * sig.bonusPerLink) *
+				hit.stale
 		}
 		damage = Math.round(damage)
 

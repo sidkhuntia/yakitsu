@@ -1,30 +1,25 @@
 /**
- * Fighter tuner: `pnpm tune`.
+ * Fighter tuner: `pnpm tune`. Run 7: refinement only, damages and maxHp on a
+ * 0.1 grid, n=800 per pair cell, on the third seed family.
  *
- * A deterministic pattern search over the four non-hero fighters' numbers
- * (maxHp, damages, and one signature number each). Each candidate is scored
- * by the same balance harness as `pnpm balance`, with every bot pinned to
- * parryChance 1 and fixed seeds, so the same input always gives the same loss.
- *
- *   Phase 1 (margin): 10 pairings x {40, 70, 100} WPM at n=60, plus each
- *     fighter's jabber and heavy mirror vs mixed at n=40.
- *       loss = sum_P margin^2 + 2 * sum_D max(0, margin + 0.03)^2
- *     One-tricks should lose by at least 3% of max HP; mixed play should win.
- *   Phase 2 (win rate, release gate): 10 pairings x {40, 70, 100} WPM at
- *     n=160, plus the same mirrors at n=40.
- *       loss = sum_P max(0, |rate - 0.5| - 0.03)^2 + 2 * sum_D max(0, rate - 0.52)^2
- *     Steps on maxHp, damages and signature values, step 1 each.
+ * Starts from the numbers in fighters.ts (committed), clamped into bounds.
+ * Coordinate search on the win-rate objective over all three speeds:
+ *   loss' = sum over 10 pairs x {40, 70, 100} WPM of max(0, |rate - 0.5| - 0.025)^2
+ *         + 2 * sum over every fighter's jabber and heavy mirror vs mixed at
+ *           {40, 70, 100} WPM of max(0, rate - 0.52)^2
+ * Pairs are n=800 per cell and mirrors n=40, on the tuner's own seed family
+ * (see tuneFightersWorker.ts, `seedCheck`), disjoint from the measurement
+ * seeds used by balance.ts and balance.test.ts.
  *
  * Feasibility: damages are bounded to the hero's profile (jab 3-5, heavy
- * 11-16, special 21-31) and special/heavy must stay in 1.6-2.4. A candidate
+ * 11-16, special 21-31) and special/heavy must stay in 1.4-2.6. A candidate
  * that breaks the ratio is rejected (infinite loss) and never simulated.
  *
  * Writes, under scripts/out/:
  *   tune-log.jsonl  one line per accepted move (plus start and end records)
  *   tune-best.json  checkpoint of the best numbers, rewritten on every move
  *
- * `--resume` starts from tune-best.json instead of fighters.ts. Either way
- * the start is clamped into the bounds first.
+ * `--resume` starts from tune-best.json instead of fighters.ts.
  */
 
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -41,6 +36,7 @@ import {
 	TUNED,
 	WPMS,
 	buildDefs,
+	seedCheck,
 	kMax,
 	knobIndex,
 	knobValue,
@@ -55,10 +51,9 @@ import {
 type Phase = 'margin' | 'win'
 
 const WORKERS = 10
-const MARGIN_MINUTES = 60
-const WIN_MINUTES = 45
+const WIN_MINUTES = 90
 const N_MARGIN_PAIR = 60
-const N_WIN_PAIR = 160
+const N_WIN_PAIR = 800
 const N_ONE = 40
 const EPS = 1e-12
 
@@ -213,7 +208,7 @@ function lossOf(phase: Phase, cells: CellOut[]): number {
 			loss +=
 				phase === 'margin'
 					? margin * margin
-					: Math.max(0, Math.abs(rate - 0.5) - 0.03) ** 2
+					: Math.max(0, Math.abs(rate - 0.5) - 0.025) ** 2
 		} else {
 			loss +=
 				2 *
@@ -229,6 +224,7 @@ const cache = new Map<string, Score>()
 
 /** Score each candidate (search indices). Uncached jobs run on the pool. */
 async function evaluate(cands: number[][], phase: Phase): Promise<Score[]> {
+	if (phase === 'margin') throw new Error('margin phase is disabled in run 6')
 	const keyOf = (ks: number[]) => `${phase}:${ks.join(',')}`
 	const todo = new Map<string, number[]>()
 	for (const ks of cands) {
@@ -248,7 +244,7 @@ async function evaluate(cands: number[][], phase: Phase): Promise<Score[]> {
 			const withCells: CellOut[] = cells.map((cell, i) => ({
 				cell,
 				rate: outs[i].rate,
-				margin: outs[i].margin,
+				margin: 0,
 			}))
 			cache.set(key, { loss: lossOf(phase, withCells), cells: withCells })
 		}),
@@ -261,7 +257,7 @@ async function evaluate(cands: number[][], phase: Phase): Promise<Score[]> {
 // Search indices. Set in main from fighters.ts (or the checkpoint), clamped.
 let ks: number[] = []
 let accepted = 0
-let phaseNow: Phase = 'margin'
+let phaseNow: Phase = 'win'
 
 function named(vec: number[]): Record<string, number> {
 	return Object.fromEntries(
@@ -299,7 +295,7 @@ function logLine(rec: Record<string, unknown>): void {
 
 /**
  * Map raw starting values into the bounds: snap each to its grid and clamp,
- * then fix any special/heavy ratio outside 1.6-2.4 by moving special into its
+ * then fix any special/heavy ratio outside 1.4-2.6 by moving special into its
  * feasible range (or heavy, if special has no room). Every change is logged.
  * Returns search indices.
  */
@@ -321,25 +317,28 @@ function clampStart(raw: number[]): number[] {
 	for (const f of TUNED) {
 		const hi = at(`${f}.heavy`)
 		const si = at(`${f}.special`)
-		const h = vals[hi]
-		const s = vals[si]
-		if (5 * s >= 8 * h && 5 * s <= 12 * h) continue
-		const sK = KNOBS[si]
-		const hK = KNOBS[hi]
-		const sLo = Math.max(sK.min, Math.ceil((8 * h) / 5))
-		const sHi = Math.min(sK.max, Math.floor((12 * h) / 5))
+		// Tenths, so the ratio test and the fixes are exact on the 0.1 grid.
+		const H = Math.round(vals[hi] * 10)
+		const S = Math.round(vals[si] * 10)
+		if (5 * S >= 7 * H && 5 * S <= 13 * H) continue
+		const sMin = Math.round(KNOBS[si].min * 10)
+		const sMax = Math.round(KNOBS[si].max * 10)
+		const hMin = Math.round(KNOBS[hi].min * 10)
+		const hMax = Math.round(KNOBS[hi].max * 10)
+		const sLo = Math.max(sMin, Math.ceil((7 * H) / 5))
+		const sHi = Math.min(sMax, Math.floor((13 * H) / 5))
 		if (sLo <= sHi) {
-			vals[si] = Math.min(sHi, Math.max(sLo, s))
+			vals[si] = Math.min(sHi, Math.max(sLo, S)) / 10
 		} else {
-			const hLo = Math.max(hK.min, Math.ceil((5 * s) / 12))
-			const hHi = Math.min(hK.max, Math.floor((5 * s) / 8))
+			const hLo = Math.max(hMin, Math.ceil((5 * S) / 13))
+			const hHi = Math.min(hMax, Math.floor((5 * S) / 7))
 			if (hLo > hHi) {
 				throw new Error(`no ratio-feasible heavy/special for ${f}`)
 			}
-			vals[hi] = Math.min(hHi, Math.max(hLo, h))
+			vals[hi] = Math.min(hHi, Math.max(hLo, H)) / 10
 		}
 		console.log(
-			`ratio fix ${f}: heavy ${h} -> ${vals[hi]}, special ${s} -> ${vals[si]}`,
+			`ratio fix ${f}: heavy ${H / 10} -> ${vals[hi]}, special ${S / 10} -> ${vals[si]}`,
 		)
 	}
 	return KNOBS.map((k, i) => knobIndex(k, vals[i]))
@@ -445,6 +444,12 @@ async function search(ctx: SearchCtx): Promise<void> {
 
 async function main(): Promise<void> {
 	mkdirSync(OUT_DIR, { recursive: true })
+	const sc = seedCheck()
+	console.log(
+		`seed check: measurement ${sc.measure}, run6 ${sc.run6}, tuner ${sc.tune}, shared with measurement ${sc.sharedMeasure}, shared with run6 ${sc.sharedRun6}`,
+	)
+	if (sc.sharedMeasure !== 0 || sc.sharedRun6 !== 0)
+		throw new Error('tuner seeds overlap measurement seeds')
 
 	let resumedPhase: Phase | 'done' | null = null
 	let raw = KNOBS.map((k) => k.get(FIGHTERS[k.fighter]))
@@ -472,28 +477,13 @@ async function main(): Promise<void> {
 		params: named(ks),
 	})
 
-	const startScore = (await evaluate([ks], 'margin'))[0]
+	const startScore = (await evaluate([ks], 'win'))[0]
 	console.log(
-		`start: margin loss ${startScore.loss.toFixed(6)} (${cellsFor('margin').length} cells per candidate, ${WORKERS} workers)`,
+		`start: win loss ${startScore.loss.toFixed(6)} (${cellsFor('win').length} cells per candidate, ${WORKERS} workers)`,
 	)
 	logLine({ event: 'startLoss', loss: startScore.loss })
 
-	// Always run the margin phase: the start may come from a checkpoint made
-	// under an older objective, so it is re-optimised first.
-	{
-		await search({
-			phase: 'margin',
-			indices: KNOBS.map((_, i) => i),
-			steps: KNOBS.map((k) => k.step),
-			deadline: T0 + MARGIN_MINUTES * 60_000,
-			stopAtZero: false,
-		})
-		const m = (await evaluate([ks], 'margin'))[0]
-		console.log(`margin phase end: loss ${m.loss.toFixed(6)}`)
-		logLine({ event: 'marginEnd', loss: m.loss, accepted })
-		checkpoint(m.loss, m, 'margin done')
-	}
-
+	// Refinement only: the margin phase is skipped in this run.
 	// Win-rate phase over all three speeds: maxHp, then damages, then the
 	// signature values, each at step 1.
 	const groupOrder = ['maxHp', 'damage', 'signature'] as const
@@ -503,7 +493,7 @@ async function main(): Promise<void> {
 	await search({
 		phase: 'win',
 		indices: order,
-		steps: KNOBS.map(() => 1),
+		steps: KNOBS.map((k) => (k.group === 'signature' ? 1 : k.step)),
 		deadline: Date.now() + WIN_MINUTES * 60_000,
 		stopAtZero: true,
 	})
@@ -518,28 +508,14 @@ async function main(): Promise<void> {
 	checkpoint(w.loss, w, 'done')
 
 	// Report the final numbers and what each knob is pinned against.
-	const m = (await evaluate([ks], 'margin'))[0]
-	console.log('\n== final parameters ==')
-	KNOBS.forEach((k, i) => {
-		const v = knobValue(k, ks[i])
-		const at =
-			ks[i] === 0 ? ' (at min)' : ks[i] === kMax(k) ? ' (at max)' : ''
-		console.log(`${k.name.padEnd(28)} ${String(v).padStart(6)}${at}`)
-	})
-	console.log('\n== final cells (margin phase) ==')
-	for (const o of m.cells) {
-		console.log(
-			`${label(o.cell).padEnd(34)} margin ${(o.margin * 100).toFixed(1)}%  rate ${(o.rate * 100).toFixed(1)}%`,
-		)
-	}
-	console.log('\n== final cells (win phase, n=160 pairs, 40/70/100 WPM) ==')
+	console.log('\n== final cells (win phase, n=800 pairs, 40/70/100 WPM) ==')
 	for (const o of w.cells) {
 		console.log(
 			`${label(o.cell).padEnd(34)} rate ${(o.rate * 100).toFixed(1)}%`,
 		)
 	}
 	console.log(
-		`\nmargin loss ${m.loss.toFixed(6)}, win loss ${w.loss.toFixed(6)}, ` +
+		`\nwin loss ${w.loss.toFixed(6)}, ` +
 			`accepted moves ${accepted}, runtime ${elapsedS()} s`,
 	)
 	pool.close()

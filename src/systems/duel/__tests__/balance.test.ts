@@ -16,7 +16,7 @@ import { WORD_TIERS } from '../../tuning'
 import { loadWordPicker } from './wordsFixture'
 
 /** Matches per pairing for the release gate. Deterministic: fixed seeds. */
-const GATE_N = 400
+const GATE_N = 1000
 /** Matches per mirror for the dominance check. Deterministic: fixed seeds. */
 const MIRROR_N = 80
 /** Matches per sanity comparison. */

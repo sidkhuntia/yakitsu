@@ -345,8 +345,8 @@ export default class Duel extends Phaser.Scene {
 					: `${move.meterCost} METER`
 			const caption =
 				move.meterCost > 0
-					? `${move.label} · ${move.damage} · ${cost}`
-					: `${move.label} · ${move.damage}`
+					? `${move.label} · ${Math.round(move.damage)} · ${cost}`
+					: `${move.label} · ${Math.round(move.damage)}`
 			this.cards.set(
 				slot,
 				new CardView(this, xs[slot], y, {
@@ -754,7 +754,7 @@ export default class Duel extends Phaser.Scene {
 		const s = this.swing
 		const move = s ? FIGHTERS.goblin.moves[s.move] : null
 		const caption = move
-			? `PARRY ${move.label} · ${move.damage}${s?.armored ? ' · ARMORED' : ''}`
+			? `PARRY ${move.label} · ${Math.round(move.damage)}${s?.armored ? ' · ARMORED' : ''}`
 			: 'PARRY!'
 		this.cards.get('block')?.setCaption(caption)
 		this.blockOffer = { landsAt, offeredAt }

@@ -145,6 +145,7 @@ const special = (o: Partial<FighterMove>): FighterMove => ({
  * block rules, interrupts and meter costs for its jab, heavy and special.
  * Fighters differ only in maxHp, the three damages, and their signature, so
  * the balance question is numbers and mechanism, not tier or windup scaling.
+ * Damage and maxHp take one decimal; the sim rounds damage when it lands.
  *
  * Change these numbers only with a fresh `pnpm tune` and `pnpm balance` run.
  */
@@ -180,11 +181,11 @@ export const FIGHTERS: Record<FighterId, FighterDef> = {
 		id: 'skeleton',
 		name: 'Skeleton',
 		title: 'Hard to put down',
-		maxHp: 106,
+		maxHp: 107,
 		moves: {
 			jab: jab({ damage: 3 }),
-			heavy: heavy({ damage: 12 }),
-			special: special({ damage: 22 }),
+			heavy: heavy({ damage: 12.2 }),
+			special: special({ damage: 22.4 }),
 		},
 		signature: { kind: 'armor', damageTakenScale: 0.9 },
 		signatureText: 'Bone Armor: takes 10% less damage from everything.',
@@ -193,11 +194,11 @@ export const FIGHTERS: Record<FighterId, FighterDef> = {
 		id: 'mushroom',
 		name: 'Mushroom',
 		title: 'Slow rot',
-		maxHp: 101,
+		maxHp: 102,
 		moves: {
-			jab: jab({ damage: 4 }),
-			heavy: heavy({ damage: 13 }),
-			special: special({ damage: 25 }),
+			jab: jab({ damage: 3.8 }),
+			heavy: heavy({ damage: 13.3 }),
+			special: special({ damage: 25.9 }),
 		},
 		signature: {
 			kind: 'poison',
@@ -212,13 +213,13 @@ export const FIGHTERS: Record<FighterId, FighterDef> = {
 		id: 'eye',
 		name: 'Flying Eye',
 		title: 'Feeds on focus',
-		maxHp: 93,
+		maxHp: 95,
 		moves: {
 			jab: jab({ damage: 5 }),
 			heavy: heavy({ damage: 13 }),
 			special: special({ damage: 21 }),
 		},
-		signature: { kind: 'drain', meterPerHit: 9 },
-		signatureText: 'Gaze: every hit steals 9 meter from the target.',
+		signature: { kind: 'drain', meterPerHit: 6 },
+		signatureText: 'Gaze: every hit steals 6 meter from the target.',
 	},
 }

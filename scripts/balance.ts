@@ -24,7 +24,7 @@ import type { MoveId } from '../src/systems/duel/duelTuning'
 import type { BotProfile, BotStyle } from '../src/systems/duel/typistBot'
 import { loadWordPicker } from '../src/systems/duel/__tests__/wordsFixture'
 
-const N = 400
+const N = 1000
 const WPMS = [40, 70, 100]
 const STYLES: BotStyle[] = ['jabber', 'heavy', 'turtle']
 const MOVES: MoveId[] = ['jab', 'heavy', 'special']

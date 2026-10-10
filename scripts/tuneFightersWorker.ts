@@ -12,16 +12,18 @@
  */
 
 import { isMainThread, parentPort } from 'node:worker_threads'
-import { mirrorRate, winRateMatrix } from '../src/systems/duel/balance'
+import { simulateMatch } from '../src/systems/duel/balance'
+import { mixSeed } from '../src/systems/duel/rng'
 import type { MoveId } from '../src/systems/duel/duelTuning'
 import {
 	FIGHTERS,
+	FIGHTER_IDS,
 	type FighterDef,
 	type FighterId,
 	type Signature,
 } from '../src/systems/duel/fighters'
 import type { WordPicker } from '../src/systems/duel/playerDeck'
-import type { BotProfile, BotStyle } from '../src/systems/duel/typistBot'
+import { botProfile, type BotProfile } from '../src/systems/duel/typistBot'
 import { loadWordPicker } from '../src/systems/duel/__tests__/wordsFixture'
 
 export const WPMS = [40, 70, 100]
@@ -83,7 +85,7 @@ const maxHpKnob = (
 	fighter,
 	min,
 	max,
-	unit: 1,
+	unit: 0.1,
 	step,
 	group: 'maxHp',
 	get: (d) => d.maxHp,
@@ -103,7 +105,7 @@ const damageKnob = (
 	fighter,
 	min,
 	max,
-	unit: 1,
+	unit: 0.1,
 	step,
 	group: 'damage',
 	get: (d) => d.moves[move].damage,
@@ -118,10 +120,10 @@ const damageKnob = (
  * numbers in `fighters.ts` when the tuner was first run.
  */
 export const KNOBS: Knob[] = [
-	maxHpKnob('goblin', 55, 100, 3),
-	damageKnob('goblin', 'jab', 3, 5, 1),
-	damageKnob('goblin', 'heavy', 11, 16, 1),
-	damageKnob('goblin', 'special', 21, 31, 1),
+	maxHpKnob('goblin', 55, 100, 10),
+	damageKnob('goblin', 'jab', 3, 5, 10),
+	damageKnob('goblin', 'heavy', 11, 16, 10),
+	damageKnob('goblin', 'special', 21, 31, 10),
 	{
 		name: 'goblin.bonusPerLink',
 		fighter: 'goblin',
@@ -148,10 +150,10 @@ export const KNOBS: Knob[] = [
 			d.signature = { ...sigOf(d, 'combo'), maxBonus: v }
 		},
 	},
-	maxHpKnob('skeleton', 100, 150, 3),
-	damageKnob('skeleton', 'jab', 3, 5, 1),
-	damageKnob('skeleton', 'heavy', 11, 16, 1),
-	damageKnob('skeleton', 'special', 21, 31, 1),
+	maxHpKnob('skeleton', 100, 150, 10),
+	damageKnob('skeleton', 'jab', 3, 5, 10),
+	damageKnob('skeleton', 'heavy', 11, 16, 10),
+	damageKnob('skeleton', 'special', 21, 31, 10),
 	{
 		name: 'skeleton.damageTakenScale',
 		fighter: 'skeleton',
@@ -165,10 +167,10 @@ export const KNOBS: Knob[] = [
 			d.signature = { ...sigOf(d, 'armor'), damageTakenScale: v }
 		},
 	},
-	maxHpKnob('mushroom', 80, 140, 3),
-	damageKnob('mushroom', 'jab', 3, 5, 1),
-	damageKnob('mushroom', 'heavy', 11, 16, 1),
-	damageKnob('mushroom', 'special', 21, 31, 1),
+	maxHpKnob('mushroom', 80, 140, 10),
+	damageKnob('mushroom', 'jab', 3, 5, 10),
+	damageKnob('mushroom', 'heavy', 11, 16, 10),
+	damageKnob('mushroom', 'special', 21, 31, 10),
 	{
 		name: 'mushroom.dps',
 		fighter: 'mushroom',
@@ -195,10 +197,10 @@ export const KNOBS: Knob[] = [
 			d.signature = { ...sigOf(d, 'poison'), durationMs: v }
 		},
 	},
-	maxHpKnob('eye', 55, 100, 3),
-	damageKnob('eye', 'jab', 3, 5, 1),
-	damageKnob('eye', 'heavy', 11, 16, 1),
-	damageKnob('eye', 'special', 21, 31, 1),
+	maxHpKnob('eye', 55, 100, 10),
+	damageKnob('eye', 'jab', 3, 5, 10),
+	damageKnob('eye', 'heavy', 11, 16, 10),
+	damageKnob('eye', 'special', 21, 31, 10),
 	{
 		name: 'eye.meterPerHit',
 		fighter: 'eye',
@@ -227,16 +229,18 @@ export function buildDefs(ks: readonly number[]): Defs {
 }
 
 /**
- * Ratio rule: every tuned fighter's special/heavy must stay within 20% of the
- * hero's ratio (26/13 = 2.0), i.e. 1.6 <= special/heavy <= 2.4. Written as
- * integer inequalities (5s >= 8h and 5s <= 12h) so float rounding cannot
+ * Ratio rule: every tuned fighter's special/heavy must stay within 30% of the
+ * hero's ratio (26/13 = 2.0), i.e. 1.4 <= special/heavy <= 2.6. Written as
+ * integer inequalities (5s >= 7h and 5s <= 13h) so float rounding cannot
  * change a verdict.
  */
 export function ratiosOk(ks: readonly number[]): boolean {
 	return TUNED.every((f) => {
 		const h = valueOf(ks, `${f}.heavy`)
 		const s = valueOf(ks, `${f}.special`)
-		return 5 * s >= 8 * h && 5 * s <= 12 * h
+		const S = Math.round(s * 10)
+		const H = Math.round(h * 10)
+		return 5 * S >= 7 * H && 5 * S <= 13 * H
 	})
 }
 
@@ -267,8 +271,6 @@ export type Job =
 export interface JobResult {
 	/** Win rate of the first fighter (`pair`) or of the one-trick (`one`). */
 	rate: number
-	/** Mean round-end HP margin, same perspective as `rate`. */
-	margin: number
 }
 
 let pickCache: WordPicker | null = null
@@ -277,32 +279,132 @@ function pick(): WordPicker {
 	return pickCache
 }
 
-export function runJob(job: Job): JobResult {
-	if (job.kind === 'pair') {
-		const [row] = winRateMatrix({
-			wpm: job.wpm,
-			n: job.n,
+/**
+ * Seed family for the tuner. Measurement seeds (`balance.ts`, `balance.test.ts`)
+ * are `mixSeed(ia, ib, k)` for pairs and `mixSeed(fi, 0x5171, k)` for mirrors.
+ * `seedCheck` confirms the two families share no seed.
+ */
+const RUN6_SEED = 0x7e5a
+const RUN6_PAIR_N = 500
+const TUNE_SEED = 0x51ed
+const TUNE_PAIR_N = 800
+const TUNE_MIRROR_N = 40
+/** Measurement n used by the release gate and `pnpm balance`. */
+const MEASURE_N = 1000
+
+/**
+ * Win rate of `a` over `n` matches against `b`, sides swapped on odd matches
+ * (the same scheme as `balance.ts`'s `winRateMatrix`), with its own seeds.
+ */
+function winRate(
+	a: FighterId,
+	b: FighterId,
+	pa: BotProfile,
+	pb: BotProfile,
+	n: number,
+	seedOf: (i: number) => number,
+	defs: Defs,
+): number {
+	let wins = 0
+	for (let i = 0; i < n; i++) {
+		const swap = i % 2 === 1
+		const first = swap ? b : a
+		const second = swap ? a : b
+		const r = simulateMatch({
+			a: first,
+			b: second,
+			profileA: swap ? pb : pa,
+			profileB: swap ? pa : pb,
+			seed: seedOf(i),
 			pick: pick(),
-			profileOverrides: RATIONAL,
-			defs: job.defs,
-			fighters: [job.a, job.b],
+			defs: { a: defs[first], b: defs[second] },
 		})
-		return { rate: row.rate, margin: row.margin }
+		if (r.winner === (swap ? 'p2' : 'p1')) wins++
 	}
-	const style: BotStyle = job.style
-	const row = mirrorRate(
+	return wins / n
+}
+
+export function runJob(job: Job): JobResult {
+	const mixed = botProfile(job.wpm, 'mixed', RATIONAL)
+	if (job.kind === 'pair') {
+		const ia = FIGHTER_IDS.indexOf(job.a)
+		const ib = FIGHTER_IDS.indexOf(job.b)
+		const rate = winRate(
+			job.a,
+			job.b,
+			mixed,
+			mixed,
+			job.n,
+			(i) => mixSeed(TUNE_SEED, ia, ib, job.wpm, i),
+			job.defs,
+		)
+		return { rate }
+	}
+	const fi = FIGHTER_IDS.indexOf(job.fighter)
+	const rate = winRate(
 		job.fighter,
-		style,
-		'mixed',
-		job.wpm,
+		job.fighter,
+		botProfile(job.wpm, job.style, RATIONAL),
+		mixed,
 		job.n,
-		pick(),
-		{
-			profileOverrides: RATIONAL,
-			defs: job.defs,
-		},
+		(i) => mixSeed(TUNE_SEED, fi, 0x5171, job.wpm, i),
+		job.defs,
 	)
-	return { rate: row.rate, margin: row.margin }
+	return { rate }
+}
+
+/**
+ * Counts the measurement seeds (n up to MEASURE_N) and the tuner's seeds, and
+ * how many values they share. The tuner must report zero shared.
+ */
+export function seedCheck(): {
+	measure: number
+	run6: number
+	tune: number
+	sharedMeasure: number
+	sharedRun6: number
+} {
+	const family = (seed: number, pairN: number, mirrorN: number) => {
+		const out = new Set<number>()
+		for (let ia = 0; ia < FIGHTER_IDS.length; ia++) {
+			for (let ib = ia + 1; ib < FIGHTER_IDS.length; ib++) {
+				for (const wpm of WPMS) {
+					for (let k = 0; k < pairN; k++)
+						out.add(mixSeed(seed, ia, ib, wpm, k))
+				}
+			}
+		}
+		for (let fi = 0; fi < FIGHTER_IDS.length; fi++) {
+			for (const wpm of WPMS) {
+				for (let k = 0; k < mirrorN; k++)
+					out.add(mixSeed(seed, fi, 0x5171, wpm, k))
+			}
+		}
+		return out
+	}
+	const measure = new Set<number>()
+	for (let ia = 0; ia < FIGHTER_IDS.length; ia++) {
+		for (let ib = ia + 1; ib < FIGHTER_IDS.length; ib++) {
+			for (let k = 0; k < MEASURE_N; k++) measure.add(mixSeed(ia, ib, k))
+		}
+	}
+	for (let fi = 0; fi < FIGHTER_IDS.length; fi++) {
+		for (let k = 0; k < MEASURE_N; k++) measure.add(mixSeed(fi, 0x5171, k))
+	}
+	const run6 = family(RUN6_SEED, RUN6_PAIR_N, TUNE_MIRROR_N)
+	const tune = family(TUNE_SEED, TUNE_PAIR_N, TUNE_MIRROR_N)
+	const shared = (x: Set<number>, y: Set<number>) => {
+		let n = 0
+		for (const v of x) if (y.has(v)) n++
+		return n
+	}
+	return {
+		measure: measure.size,
+		run6: run6.size,
+		tune: tune.size,
+		sharedMeasure: shared(tune, measure),
+		sharedRun6: shared(tune, run6),
+	}
 }
 
 if (!isMainThread && parentPort) {
